@@ -89,6 +89,12 @@ func llvmTy(t Type) string {
 	return "%" + t.Name
 }
 
+func tagConst(name string) string {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(name))
+	return fmt.Sprintf("%d", h.Sum32()&0x7fffffff)
+}
+
 func (g *Codegen) emitFunc(f *FuncDecl) (string, error) {
 	c := &cgFunc{g: g, fn: f}
 	entry := c.newBlock("entry")
@@ -200,9 +206,7 @@ func (c *cgFunc) expr(x Expr, e *cgEnv) (cgVal, error) {
 		if q.Value { return cgVal{ty: Type{Name: "bool"}, op: "1"}, nil }
 		return cgVal{ty: Type{Name: "bool"}, op: "0"}, nil
 	case *TagExpr:
-		h := fnv.New32a()
-		_, _ = h.Write([]byte(q.Name))
-		return cgVal{ty: Type{Name: "tag"}, op: fmt.Sprintf("%d", h.Sum32()&0x7fffffff)}, nil
+		return cgVal{ty: Type{Name: "tag"}, op: tagConst(q.Name)}, nil
 	case *FieldExpr:
 		base, err := c.expr(q.Base, e)
 		if err != nil { return cgVal{}, err }
@@ -290,6 +294,8 @@ func (c *cgFunc) expr(x Expr, e *cgEnv) (cgVal, error) {
 			c.emit(fmt.Sprintf("%s = icmp %s %s %s, %s", t, pred, llvmTy(lv.ty), lv.op, rv.op))
 			return cgVal{ty: Type{Name: "bool"}, op: t}, nil
 		}
+	case *MatchExpr:
+		return c.matchExpr(q, e)
 	case *IfExpr:
 		return c.ifExpr(q, e)
 	case *EscExpr:
@@ -305,6 +311,72 @@ func (c *cgFunc) expr(x Expr, e *cgEnv) (cgVal, error) {
 		return c.world(q, e)
 	}
 	return cgVal{}, fmt.Errorf("codegen: unsupported expression")
+}
+
+func (c *cgFunc) matchExpr(q *MatchExpr, e *cgEnv) (cgVal, error) {
+	sv, err := c.expr(q.Value, e)
+	if err != nil { return cgVal{}, err }
+
+	mergeB := c.newBlock("match.merge")
+	armB := make([]*blockBuf, len(q.Arms))
+	for i := range q.Arms { armB[i] = c.newBlock("match.arm") }
+
+	// Emit the decision chain from the current block.
+	for i, a := range q.Arms {
+		if a.Pat.Kind == '_' {
+			c.br(armB[i])
+			break
+		}
+		miss := c.newBlock("match.next")
+		var imm string
+		switch a.Pat.Kind {
+		case 't':
+			imm = tagConst(a.Pat.Lit)
+		case 'i':
+			imm = a.Pat.Lit
+		case 'b':
+			imm = "0"
+			if a.Pat.Lit == "true" { imm = "1" }
+		}
+		t := c.newTmp()
+		c.emit(fmt.Sprintf("%s = icmp eq %s %s, %s", t, llvmTy(sv.ty), sv.op, imm))
+		c.emit(fmt.Sprintf("br i1 %s, label %%%s, label %%%s", t, armB[i].label, miss.label))
+		c.cur.term = true
+		c.cur = miss
+	}
+	if !c.cur.term {
+		c.emit("unreachable")
+		c.cur.term = true
+	}
+
+	var vals []cgVal
+	var preds []string
+	for i, a := range q.Arms {
+		c.cur = armB[i]
+		v, err := c.block(a.Body, e.clone())
+		if err != nil { return cgVal{}, err }
+		if !c.cur.term {
+			preds = append(preds, c.cur.label)
+			vals = append(vals, v)
+			c.br(mergeB)
+		}
+	}
+
+	c.cur = mergeB
+	if len(vals) == 0 {
+		c.emit("unreachable")
+		c.cur.term = true
+		return cgVal{ty: Type{Name: "never"}}, nil
+	}
+	if len(vals) == 1 { return vals[0], nil }
+
+	t := c.newTmp()
+	var ins []string
+	for i, v := range vals {
+		ins = append(ins, fmt.Sprintf("[ %s, %%%s ]", v.op, preds[i]))
+	}
+	c.emit(fmt.Sprintf("%s = phi %s %s", t, llvmTy(vals[0].ty), strings.Join(ins, ", ")))
+	return cgVal{ty: vals[0].ty, op: t}, nil
 }
 
 func (c *cgFunc) ifExpr(q *IfExpr, e *cgEnv) (cgVal, error) {
