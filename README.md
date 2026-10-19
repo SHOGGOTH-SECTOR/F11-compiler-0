@@ -76,15 +76,23 @@ LLVM inspection:
 ## Implemented in the seed
 
 - `func` and expression blocks
-- scalar bootstrap `i32`, `i64`, `bool`, `tag`
+- scalar bootstrap `i32`, `i64`, `bool`, `tag`, `byte`, `str`
 - function calls
-- arithmetic/comparison/boolean expressions
+- arithmetic/comparison/short-circuit boolean expressions
+- `var`, `<-`, `while`, `if/else`
+- structs, positional construction, nested field access
+- scalar `match` with tags / integers / booleans / `_`
+- UTF-8 string literals, `len(str)`, byte indexing
 - `F11 name [admitted names] -> T { ... }`
 - `K`, `J`, `N`
 - `cond || esc payload`
 - `esc e { recov }`
 - lexical world closure
 - native LLVM/Clang AOT output
+
+## Live next strap
+
+`strap/f11c.f11` is now a real F11 program compiled by Stage 0 in CI. It already defines compiler-facing `span` and `tok` structures, uses world semantics, `match`, strings, indexing, and native control flow. It is the growing child compiler; Stage 0 exists only to teach it the remaining wick.
 
 The bootstrap scalars above are implementation scaffolding, not the final F11 numeric law. The language specification defines the intended `f11 / n11 / z11 / n22 / z22 / ...` families and the F11 ABI.
 
