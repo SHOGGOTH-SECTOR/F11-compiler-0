@@ -92,6 +92,31 @@ func (l *Lexer) next() (Token, error) {
 	}
 
 	r := l.take()
+	if r == '"' {
+		var b strings.Builder
+		for !l.eof() {
+			x := l.take()
+			if x == '"' {
+				return Token{Kind: TokString, Lit: b.String(), Pos: p}, nil
+			}
+			if x == '\\' {
+				if l.eof() { break }
+				e := l.take()
+				switch e {
+				case 'n': b.WriteByte('\n')
+				case 'r': b.WriteByte('\r')
+				case 't': b.WriteByte('\t')
+				case '\\': b.WriteByte('\\')
+				case '"': b.WriteByte('"')
+				default:
+					return Token{}, fmt.Errorf("%d:%d: unknown string escape \\%c", p.Line, p.Col, e)
+				}
+				continue
+			}
+			b.WriteRune(x)
+		}
+		return Token{}, fmt.Errorf("%d:%d: unterminated string", p.Line, p.Col)
+	}
 	switch r {
 	case '[':
 		return Token{Kind: TokLWorld, Lit: string(r), Pos: p}, nil
