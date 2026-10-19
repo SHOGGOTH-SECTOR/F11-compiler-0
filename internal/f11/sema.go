@@ -89,7 +89,7 @@ func Check(p *Program) error {
 func (s *Sema) supportedType(t Type) bool {
 	if t.Mode != 0 { return false }
 	switch t.Name {
-	case "i32", "i64", "bool", "tag":
+	case "i32", "i64", "bool", "tag", "byte", "str":
 		return true
 	default:
 		_, ok := s.structs[t.Name]
@@ -171,6 +171,8 @@ func (s *Sema) expr(x Expr, e *env, esc *escCtx) (Type, error) {
 			return Type{}, terr(q.Pos, "integer literal out of i32 range")
 		}
 		return Type{Name: "i32"}, nil
+	case *StringExpr:
+		return Type{Name: "str"}, nil
 	case *BoolExpr:
 		return Type{Name: "bool"}, nil
 	case *TagExpr:
@@ -186,6 +188,18 @@ func (s *Sema) expr(x Expr, e *env, esc *escCtx) (Type, error) {
 			if f.Name == q.Name { return f.Ty, nil }
 		}
 		return Type{}, terr(q.Pos, "struct %s has no field %s", d.Name, q.Name)
+	case *IndexExpr:
+		bt, err := s.expr(q.Base, e, esc)
+		if err != nil { return Type{}, err }
+		if bt.Name != "str" {
+			return Type{}, terr(q.Pos, "indexing requires str in F11/0, got %s", bt.String())
+		}
+		it, err := s.expr(q.Index, e, esc)
+		if err != nil { return Type{}, err }
+		if it.Name != "i32" {
+			return Type{}, terr(q.Pos, "string index requires i32, got %s", it.String())
+		}
+		return Type{Name: "byte"}, nil
 	case *VarExpr:
 		b, ok := e.vals[q.Name]
 		if !ok {
@@ -193,6 +207,17 @@ func (s *Sema) expr(x Expr, e *env, esc *escCtx) (Type, error) {
 		}
 		return b.ty, nil
 	case *CallExpr:
+		if q.Name == "len" {
+			if len(q.Args) != 1 {
+				return Type{}, terr(q.Pos, "len expects 1 arg, got %d", len(q.Args))
+			}
+			at, err := s.expr(q.Args[0], e, esc)
+			if err != nil { return Type{}, err }
+			if at.Name != "str" {
+				return Type{}, terr(q.Pos, "len requires str in F11/0, got %s", at.String())
+			}
+			return Type{Name: "i32"}, nil
+		}
 		if f, ok := s.funcs[q.Name]; ok {
 			if len(q.Args) != len(f.Params) {
 				return Type{}, terr(q.Pos, "%s expects %d args, got %d", q.Name, len(f.Params), len(q.Args))
