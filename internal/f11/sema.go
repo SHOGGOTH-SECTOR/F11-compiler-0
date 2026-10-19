@@ -265,6 +265,59 @@ func (s *Sema) expr(x Expr, e *env, esc *escCtx) (Type, error) {
 			}
 			return Type{Name: "bool"}, nil
 		}
+	case *MatchExpr:
+		vt, err := s.expr(q.Value, e, esc)
+		if err != nil { return Type{}, err }
+		if len(q.Arms) == 0 {
+			return Type{}, terr(q.Pos, "match requires at least one arm")
+		}
+		seen := map[string]bool{}
+		hasWild := false
+		hasTrue := false
+		hasFalse := false
+		var out Type
+		haveOut := false
+		for _, a := range q.Arms {
+			key := string(a.Pat.Kind) + ":" + a.Pat.Lit
+			if seen[key] {
+				return Type{}, terr(a.Pat.Pos, "duplicate match pattern %s", a.Pat.Lit)
+			}
+			seen[key] = true
+			switch a.Pat.Kind {
+			case '_':
+				hasWild = true
+			case 't':
+				if vt.Name != "tag" {
+					return Type{}, terr(a.Pat.Pos, "tag pattern requires tag scrutinee, got %s", vt.String())
+				}
+			case 'i':
+				if vt.Name != "i32" && vt.Name != "i64" {
+					return Type{}, terr(a.Pat.Pos, "integer pattern requires integer scrutinee, got %s", vt.String())
+				}
+			case 'b':
+				if vt.Name != "bool" {
+					return Type{}, terr(a.Pat.Pos, "boolean pattern requires bool scrutinee, got %s", vt.String())
+				}
+				if a.Pat.Lit == "true" { hasTrue = true } else { hasFalse = true }
+			}
+			at, err := s.block(a.Body, e.clone(), esc)
+			if err != nil { return Type{}, err }
+			if at.Name != "never" {
+				if !haveOut {
+					out = at
+					haveOut = true
+				} else if !sameBase(out, at) {
+					return Type{}, terr(a.Pat.Pos, "match arms differ: %s and %s", out.String(), at.String())
+				}
+			}
+		}
+		if !hasWild {
+			if vt.Name != "bool" || !hasTrue || !hasFalse {
+				return Type{}, terr(q.Pos, "match on %s requires _ fallback", vt.String())
+			}
+		}
+		if !haveOut { return Type{Name: "never"}, nil }
+		return out, nil
 	case *IfExpr:
 		ct, err := s.expr(q.Cond, e, esc)
 		if err != nil { return Type{}, err }
