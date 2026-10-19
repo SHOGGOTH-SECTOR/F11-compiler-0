@@ -17,6 +17,7 @@ const (
 	TokIf
 	TokElse
 	TokStruct
+	TokMatch
 	TokTrue
 	TokFalse
 	TokLParen
