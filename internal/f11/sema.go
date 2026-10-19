@@ -5,7 +5,10 @@ import (
 	"strconv"
 )
 
-type Sema struct{ funcs map[string]*FuncDecl }
+type Sema struct {
+	funcs   map[string]*FuncDecl
+	structs map[string]*StructDecl
+}
 
 type binding struct {
 	ty  Type
@@ -27,16 +30,43 @@ type escCtx struct {
 }
 
 func Check(p *Program) error {
-	s := &Sema{funcs: map[string]*FuncDecl{}}
+	s := &Sema{
+		funcs:   map[string]*FuncDecl{},
+		structs: map[string]*StructDecl{},
+	}
+	for _, d := range p.Structs {
+		if _, ok := s.structs[d.Name]; ok {
+			return fmt.Errorf("%d:%d: duplicate struct %s", d.Pos.Line, d.Pos.Col, d.Name)
+		}
+		s.structs[d.Name] = d
+	}
+	for _, d := range p.Structs {
+		seen := map[string]bool{}
+		for _, f := range d.Fields {
+			if seen[f.Name] {
+				return fmt.Errorf("%d:%d: duplicate field %s.%s", f.Pos.Line, f.Pos.Col, d.Name, f.Name)
+			}
+			seen[f.Name] = true
+			if !s.supportedType(f.Ty) {
+				return fmt.Errorf("%d:%d: unsupported field type %s", f.Pos.Line, f.Pos.Col, f.Ty.String())
+			}
+			if f.Ty.Name == d.Name {
+				return fmt.Errorf("%d:%d: struct %s cannot contain itself by value", f.Pos.Line, f.Pos.Col, d.Name)
+			}
+		}
+	}
 	for _, f := range p.Funcs {
 		if _, ok := s.funcs[f.Name]; ok {
 			return fmt.Errorf("%d:%d: duplicate func %s", f.Pos.Line, f.Pos.Col, f.Name)
 		}
-		if !supportedType(f.Ret) {
+		if _, ok := s.structs[f.Name]; ok {
+			return fmt.Errorf("%d:%d: name %s already used by struct", f.Pos.Line, f.Pos.Col, f.Name)
+		}
+		if !s.supportedType(f.Ret) {
 			return fmt.Errorf("%d:%d: unsupported return type %s in bootstrap compiler", f.Pos.Line, f.Pos.Col, f.Ret.String())
 		}
 		for _, q := range f.Params {
-			if !supportedType(q.Ty) {
+			if !s.supportedType(q.Ty) {
 				return fmt.Errorf("%d:%d: unsupported parameter type %s", q.Pos.Line, q.Pos.Col, q.Ty.String())
 			}
 		}
@@ -56,12 +86,14 @@ func Check(p *Program) error {
 	return nil
 }
 
-func supportedType(t Type) bool {
+func (s *Sema) supportedType(t Type) bool {
+	if t.Mode != 0 { return false }
 	switch t.Name {
 	case "i32", "i64", "bool", "tag":
-		return t.Mode == 0
+		return true
 	default:
-		return false
+		_, ok := s.structs[t.Name]
+		return ok
 	}
 }
 func sameBase(a, b Type) bool { return a.Name == b.Name && a.Mode == b.Mode }
@@ -86,7 +118,7 @@ func (s *Sema) block(b *Block, e *env, esc *escCtx) (Type, error) {
 			ty, err := s.expr(q.X, e, esc)
 			if err != nil { return Type{}, err }
 			if q.Ty.Name != "" {
-				if !supportedType(q.Ty) {
+				if !s.supportedType(q.Ty) {
 					return Type{}, terr(q.Pos, "unsupported mutable type %s", q.Ty.String())
 				}
 				if !sameBase(ty, q.Ty) {
@@ -143,6 +175,17 @@ func (s *Sema) expr(x Expr, e *env, esc *escCtx) (Type, error) {
 		return Type{Name: "bool"}, nil
 	case *TagExpr:
 		return Type{Name: "tag"}, nil
+	case *FieldExpr:
+		bt, err := s.expr(q.Base, e, esc)
+		if err != nil { return Type{}, err }
+		d, ok := s.structs[bt.Name]
+		if !ok {
+			return Type{}, terr(q.Pos, "field access requires struct, got %s", bt.String())
+		}
+		for _, f := range d.Fields {
+			if f.Name == q.Name { return f.Ty, nil }
+		}
+		return Type{}, terr(q.Pos, "struct %s has no field %s", d.Name, q.Name)
 	case *VarExpr:
 		b, ok := e.vals[q.Name]
 		if !ok {
@@ -150,19 +193,33 @@ func (s *Sema) expr(x Expr, e *env, esc *escCtx) (Type, error) {
 		}
 		return b.ty, nil
 	case *CallExpr:
-		f, ok := s.funcs[q.Name]
-		if !ok { return Type{}, terr(q.Pos, "unknown func %s", q.Name) }
-		if len(q.Args) != len(f.Params) {
-			return Type{}, terr(q.Pos, "%s expects %d args, got %d", q.Name, len(f.Params), len(q.Args))
-		}
-		for i, a := range q.Args {
-			at, err := s.expr(a, e, esc)
-			if err != nil { return Type{}, err }
-			if !sameBase(at, f.Params[i].Ty) {
-				return Type{}, terr(a.GetPos(), "arg %d to %s is %s, expected %s", i+1, q.Name, at.String(), f.Params[i].Ty.String())
+		if f, ok := s.funcs[q.Name]; ok {
+			if len(q.Args) != len(f.Params) {
+				return Type{}, terr(q.Pos, "%s expects %d args, got %d", q.Name, len(f.Params), len(q.Args))
 			}
+			for i, a := range q.Args {
+				at, err := s.expr(a, e, esc)
+				if err != nil { return Type{}, err }
+				if !sameBase(at, f.Params[i].Ty) {
+					return Type{}, terr(a.GetPos(), "arg %d to %s is %s, expected %s", i+1, q.Name, at.String(), f.Params[i].Ty.String())
+				}
+			}
+			return f.Ret, nil
 		}
-		return f.Ret, nil
+		if d, ok := s.structs[q.Name]; ok {
+			if len(q.Args) != len(d.Fields) {
+				return Type{}, terr(q.Pos, "%s constructor expects %d args, got %d", q.Name, len(d.Fields), len(q.Args))
+			}
+			for i, a := range q.Args {
+				at, err := s.expr(a, e, esc)
+				if err != nil { return Type{}, err }
+				if !sameBase(at, d.Fields[i].Ty) {
+					return Type{}, terr(a.GetPos(), "field %s.%s is %s, got %s", d.Name, d.Fields[i].Name, d.Fields[i].Ty.String(), at.String())
+				}
+			}
+			return Type{Name: d.Name}, nil
+		}
+		return Type{}, terr(q.Pos, "unknown callable %s", q.Name)
 	case *UnaryExpr:
 		t, err := s.expr(q.X, e, esc)
 		if err != nil { return Type{}, err }
