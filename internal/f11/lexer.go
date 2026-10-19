@@ -151,7 +151,7 @@ func (l *Lexer) next() (Token, error) {
 		low := strings.ToLower(lit)
 		kw := map[string]TokKind{
 			"func": TokFunc, "f11": TokF11, "k": TokK, "j": TokJ, "n": TokN,
-			"esc": TokEsc, "var": TokVar, "while": TokWhile, "if": TokIf, "else": TokElse, "struct": TokStruct,
+			"esc": TokEsc, "var": TokVar, "while": TokWhile, "if": TokIf, "else": TokElse, "struct": TokStruct, "match": TokMatch,
 			"true": TokTrue, "false": TokFalse,
 		}
 		if k, ok := kw[low]; ok {
