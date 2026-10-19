@@ -12,7 +12,22 @@ func (t Type) String() string {
 	return t.Name
 }
 
-type Program struct{ Funcs []*FuncDecl }
+type Program struct {
+	Structs []*StructDecl
+	Funcs   []*FuncDecl
+}
+
+type FieldDecl struct {
+	Name string
+	Ty   Type
+	Pos  Pos
+}
+
+type StructDecl struct {
+	Name   string
+	Fields []FieldDecl
+	Pos    Pos
+}
 
 type Param struct {
 	Name string
@@ -60,6 +75,14 @@ type TagExpr struct {
 }
 func (*TagExpr) exprNode() {}
 func (e *TagExpr) GetPos() Pos { return e.Pos }
+
+type FieldExpr struct {
+	Base Expr
+	Name string
+	Pos  Pos
+}
+func (*FieldExpr) exprNode() {}
+func (e *FieldExpr) GetPos() Pos { return e.Pos }
 
 type CallExpr struct {
 	Name string
