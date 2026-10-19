@@ -7,14 +7,16 @@ import (
 
 type Sema struct{ funcs map[string]*FuncDecl }
 
-type env struct{ vals map[string]Type }
+type binding struct {
+	ty  Type
+	mut bool
+}
+type env struct{ vals map[string]binding }
 
-func newEnv() *env { return &env{vals: map[string]Type{}} }
+func newEnv() *env { return &env{vals: map[string]binding{}} }
 func (e *env) clone() *env {
 	n := newEnv()
-	for k, v := range e.vals {
-		n.vals[k] = v
-	}
+	for k, v := range e.vals { n.vals[k] = v }
 	return n
 }
 
@@ -43,12 +45,10 @@ func Check(p *Program) error {
 	for _, f := range p.Funcs {
 		e := newEnv()
 		for _, q := range f.Params {
-			e.vals[q.Name] = q.Ty
+			e.vals[q.Name] = binding{ty: q.Ty}
 		}
 		ty, err := s.expr(f.Body, e, nil)
-		if err != nil {
-			return err
-		}
+		if err != nil { return err }
 		if !sameBase(ty, f.Ret) {
 			return terr(f.Body.GetPos(), "func %s returns %s, declared %s", f.Name, ty.String(), f.Ret.String())
 		}
@@ -74,25 +74,59 @@ func (s *Sema) block(b *Block, e *env, esc *escCtx) (Type, error) {
 		switch q := st.(type) {
 		case *BindStmt:
 			ty, err := s.expr(q.X, e, esc)
-			if err != nil {
-				return Type{}, err
-			}
+			if err != nil { return Type{}, err }
 			if q.Role == 'N' && ty.Name != "bool" {
 				return Type{}, terr(q.Pos, "N %s requires bool, got %s", q.Name, ty.String())
 			}
 			if _, exists := e.vals[q.Name]; exists {
 				return Type{}, terr(q.Pos, "duplicate binding %s", q.Name)
 			}
-			e.vals[q.Name] = ty
+			e.vals[q.Name] = binding{ty: ty}
+		case *VarStmt:
+			ty, err := s.expr(q.X, e, esc)
+			if err != nil { return Type{}, err }
+			if q.Ty.Name != "" {
+				if !supportedType(q.Ty) {
+					return Type{}, terr(q.Pos, "unsupported mutable type %s", q.Ty.String())
+				}
+				if !sameBase(ty, q.Ty) {
+					return Type{}, terr(q.Pos, "var %s initializer is %s, declared %s", q.Name, ty.String(), q.Ty.String())
+				}
+				ty = q.Ty
+			}
+			if _, exists := e.vals[q.Name]; exists {
+				return Type{}, terr(q.Pos, "duplicate binding %s", q.Name)
+			}
+			e.vals[q.Name] = binding{ty: ty, mut: true}
+		case *AssignStmt:
+			b, ok := e.vals[q.Name]
+			if !ok {
+				return Type{}, terr(q.Pos, "assignment target %q is not admitted or bound", q.Name)
+			}
+			if !b.mut {
+				return Type{}, terr(q.Pos, "%s is immutable; declare it with var", q.Name)
+			}
+			ty, err := s.expr(q.X, e, esc)
+			if err != nil { return Type{}, err }
+			if !sameBase(ty, b.ty) {
+				return Type{}, terr(q.Pos, "assignment to %s is %s, expected %s", q.Name, ty.String(), b.ty.String())
+			}
+		case *WhileStmt:
+			ct, err := s.expr(q.Cond, e, esc)
+			if err != nil { return Type{}, err }
+			if ct.Name != "bool" {
+				return Type{}, terr(q.Pos, "while condition requires bool, got %s", ct.String())
+			}
+			if _, err = s.block(q.Body, e.clone(), esc); err != nil {
+				return Type{}, err
+			}
 		case *ExprStmt:
 			if _, err := s.expr(q.X, e, esc); err != nil {
 				return Type{}, err
 			}
 		}
 	}
-	if b.Tail == nil {
-		return Type{Name: "i32"}, nil
-	}
+	if b.Tail == nil { return Type{Name: "i32"}, nil }
 	return s.expr(b.Tail, e, esc)
 }
 
@@ -110,24 +144,20 @@ func (s *Sema) expr(x Expr, e *env, esc *escCtx) (Type, error) {
 	case *TagExpr:
 		return Type{Name: "tag"}, nil
 	case *VarExpr:
-		t, ok := e.vals[q.Name]
+		b, ok := e.vals[q.Name]
 		if !ok {
 			return Type{}, terr(q.Pos, "name %q is not admitted or bound in this world", q.Name)
 		}
-		return t, nil
+		return b.ty, nil
 	case *CallExpr:
 		f, ok := s.funcs[q.Name]
-		if !ok {
-			return Type{}, terr(q.Pos, "unknown func %s", q.Name)
-		}
+		if !ok { return Type{}, terr(q.Pos, "unknown func %s", q.Name) }
 		if len(q.Args) != len(f.Params) {
 			return Type{}, terr(q.Pos, "%s expects %d args, got %d", q.Name, len(f.Params), len(q.Args))
 		}
 		for i, a := range q.Args {
 			at, err := s.expr(a, e, esc)
-			if err != nil {
-				return Type{}, err
-			}
+			if err != nil { return Type{}, err }
 			if !sameBase(at, f.Params[i].Ty) {
 				return Type{}, terr(a.GetPos(), "arg %d to %s is %s, expected %s", i+1, q.Name, at.String(), f.Params[i].Ty.String())
 			}
@@ -135,9 +165,7 @@ func (s *Sema) expr(x Expr, e *env, esc *escCtx) (Type, error) {
 		return f.Ret, nil
 	case *UnaryExpr:
 		t, err := s.expr(q.X, e, esc)
-		if err != nil {
-			return Type{}, err
-		}
+		if err != nil { return Type{}, err }
 		if q.Op == TokMinus {
 			if t.Name != "i32" && t.Name != "i64" {
 				return Type{}, terr(q.Pos, "unary - requires integer")
@@ -145,30 +173,19 @@ func (s *Sema) expr(x Expr, e *env, esc *escCtx) (Type, error) {
 			return t, nil
 		}
 		if q.Op == TokBang {
-			if t.Name != "bool" {
-				return Type{}, terr(q.Pos, "! requires bool")
-			}
+			if t.Name != "bool" { return Type{}, terr(q.Pos, "! requires bool") }
 			return Type{Name: "bool"}, nil
 		}
 	case *BinaryExpr:
 		lt, err := s.expr(q.L, e, esc)
-		if err != nil {
-			return Type{}, err
-		}
+		if err != nil { return Type{}, err }
 		if _, ok := q.R.(*EscExpr); ok && (q.Op == TokOr || q.Op == TokAnd) {
-			if lt.Name != "bool" {
-				return Type{}, terr(q.Pos, "boolean guard requires bool")
-			}
-			_, err = s.expr(q.R, e, esc)
-			if err != nil {
-				return Type{}, err
-			}
+			if lt.Name != "bool" { return Type{}, terr(q.Pos, "boolean guard requires bool") }
+			if _, err = s.expr(q.R, e, esc); err != nil { return Type{}, err }
 			return Type{Name: "bool"}, nil
 		}
 		rt, err := s.expr(q.R, e, esc)
-		if err != nil {
-			return Type{}, err
-		}
+		if err != nil { return Type{}, err }
 		switch q.Op {
 		case TokPlus, TokMinus, TokStar, TokSlash, TokPercent:
 			if !sameBase(lt, rt) || (lt.Name != "i32" && lt.Name != "i64") {
@@ -191,17 +208,29 @@ func (s *Sema) expr(x Expr, e *env, esc *escCtx) (Type, error) {
 			}
 			return Type{Name: "bool"}, nil
 		}
-	case *EscExpr:
-		if esc == nil {
-			return Type{}, terr(q.Pos, "esc outside F11 world")
+	case *IfExpr:
+		ct, err := s.expr(q.Cond, e, esc)
+		if err != nil { return Type{}, err }
+		if ct.Name != "bool" {
+			return Type{}, terr(q.Pos, "if condition requires bool, got %s", ct.String())
 		}
+		tt, err := s.block(q.Then, e.clone(), esc)
+		if err != nil { return Type{}, err }
+		et, err := s.block(q.Else, e.clone(), esc)
+		if err != nil { return Type{}, err }
+		if tt.Name == "never" { return et, nil }
+		if et.Name == "never" { return tt, nil }
+		if !sameBase(tt, et) {
+			return Type{}, terr(q.Pos, "if branches differ: %s and %s", tt.String(), et.String())
+		}
+		return tt, nil
+	case *EscExpr:
+		if esc == nil { return Type{}, terr(q.Pos, "esc outside F11 world") }
 		if q.Target != "" && q.Target != esc.name {
 			return Type{}, terr(q.Pos, "targeted esc %s not supported unless it names current world %s", q.Target, esc.name)
 		}
 		t, err := s.expr(q.Value, e, esc)
-		if err != nil {
-			return Type{}, err
-		}
+		if err != nil { return Type{}, err }
 		if !esc.seen {
 			cp := t
 			esc.ty = &cp
@@ -213,17 +242,15 @@ func (s *Sema) expr(x Expr, e *env, esc *escCtx) (Type, error) {
 	case *WorldExpr:
 		we := newEnv()
 		for _, name := range q.Admits {
-			t, ok := e.vals[name]
+			b, ok := e.vals[name]
 			if !ok {
 				return Type{}, terr(q.Pos, "F11 %s admits unknown name %s", q.Name, name)
 			}
-			we.vals[name] = t
+			we.vals[name] = b
 		}
 		ec := &escCtx{name: q.Name}
 		bt, err := s.block(q.Body, we, ec)
-		if err != nil {
-			return Type{}, err
-		}
+		if err != nil { return Type{}, err }
 		if !sameBase(bt, q.Ret) {
 			return Type{}, terr(q.Pos, "F11 %s body is %s, declared %s", q.Name, bt.String(), q.Ret.String())
 		}
@@ -232,12 +259,10 @@ func (s *Sema) expr(x Expr, e *env, esc *escCtx) (Type, error) {
 				return Type{}, terr(q.Pos, "F11 %s can esc but has no recov arm", q.Name)
 			}
 			q.EscTy = *ec.ty
-			re := newEnv()
-			re.vals[q.RecovVar] = *ec.ty
+			re := e.clone()
+			re.vals[q.RecovVar] = binding{ty: *ec.ty}
 			rt, err := s.block(q.Recov, re, nil)
-			if err != nil {
-				return Type{}, err
-			}
+			if err != nil { return Type{}, err }
 			if !sameBase(rt, q.Ret) {
 				return Type{}, terr(q.Recov.Pos, "recov is %s, expected %s", rt.String(), q.Ret.String())
 			}
