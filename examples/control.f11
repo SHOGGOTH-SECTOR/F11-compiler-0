@@ -1,0 +1,17 @@
+func main() -> i32 {
+    F11 run [] -> i32 {
+        var i:i32 = 0;
+        var sum:i32 = 0;
+
+        while i < 5 {
+            sum <- sum + i;
+            i <- i + 1;
+        }
+
+        if sum == 10 {
+            17;
+        } else {
+            99;
+        };
+    };
+}
