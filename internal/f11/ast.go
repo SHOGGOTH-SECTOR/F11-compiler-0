@@ -117,6 +117,25 @@ type IfExpr struct {
 func (*IfExpr) exprNode() {}
 func (e *IfExpr) GetPos() Pos { return e.Pos }
 
+type MatchPat struct {
+	Kind byte // 't' tag, 'i' integer, 'b' bool, '_' wildcard
+	Lit  string
+	Pos  Pos
+}
+
+type MatchArm struct {
+	Pat  MatchPat
+	Body *Block
+}
+
+type MatchExpr struct {
+	Value Expr
+	Arms  []MatchArm
+	Pos   Pos
+}
+func (*MatchExpr) exprNode() {}
+func (e *MatchExpr) GetPos() Pos { return e.Pos }
+
 type EscExpr struct {
 	Target string
 	Value  Expr
