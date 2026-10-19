@@ -19,6 +19,20 @@ func tokOk(t:tok) -> bool {
     t.at.hi >= t.at.lo;
 }
 
+func tokScore(t:tok) -> i32 {
+    match t.kind {
+        .ident {
+            3;
+        }
+        .int {
+            5;
+        }
+        _ {
+            1;
+        }
+    };
+}
+
 func main() -> i32 {
     F11 strap [] -> i32 {
         s = span(4, 11);
@@ -29,7 +43,7 @@ func main() -> i32 {
         N sane = tokOk(t);
 
         sane || esc 91;
-        width;
+        width + tokScore(t);
     }
     esc e {
         e;
