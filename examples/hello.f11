@@ -1,0 +1,11 @@
+func inc (x: i32) -> i32 = x + 1;
+
+func main () -> i32 =
+F11 run ⟪ ⟫ -> i32 ⟨
+    K base ≡ 7;
+    J out ≡ inc(base);
+    N sane ≡ out == 8;
+    sane ∨ esc 111;
+    out
+⟩
+esc e ⟨ e ⟩
