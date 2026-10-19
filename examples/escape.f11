@@ -1,9 +1,12 @@
-func main () -> i32 =
-F11 run ⟪ ⟫ -> i32 ⟨
-    K base ≡ 7;
-    J out ≡ base + 1;
-    N sane ≡ out == 9;
-    sane ∨ esc 42;
-    out
-⟩
-esc e ⟨ e ⟩
+func main() -> i32 {
+    F11 run [] -> i32 {
+        K base = 7;
+        J out = base + 1;
+        N sane = out == 9;
+        sane || esc 42;
+        out;
+    }
+    esc e {
+        e;
+    };
+}
