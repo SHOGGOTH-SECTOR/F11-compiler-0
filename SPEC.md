@@ -1,371 +1,746 @@
 # F11 Language Specification
-## Draft 0.2 — Bootstrap Core
+## Draft 0.3 — Keyboard Core / Bootstrap Law
 
-**Source:** `.f11` · **Compiler:** `f11c` · **Core calculus:** `JK∨` · **Backend:** native AOT, LLVM first
+**Source:** `.f11`  
+**Compiler:** `f11c`  
+**Core calculus:** `JK∨`  
+**Native contract:** F11 ABI  
+**Initial backend:** LLVM
 
 > A process should not automatically inherit the universe. It should receive a world.
 
-## 1. Purpose
-F11 is a native systems language for bounded-world computation. A process receives an operative world, binds relevance inside it, transforms state under that binding, evaluates invariants, and escapes when the world is no longer sufficient.
+## 1. Language stance
+
+F11 is a native systems language for bounded-world computation. A computation receives an operative world, binds relevance inside it, transforms under that binding, tests invariants, and escapes when the world is no longer sufficient.
 
 ```text
-F11 → K → J → N → cond
-                  └─∨ esc
+F11 -> K -> J -> N -> cond
+                    \-> || esc
 ```
 
-`F11` totalizes operative context. `K` binds relevance. `J` marks transformation. `N` binds invariant evidence. A `cond` continues or short-circuits through `∨ esc`. `esc` rejects the sufficiency of the current world and enters its `recov` path.
+The source language is designed for terminal natives: DOS users, shell users, game scripters, BBS-era programmers, exploit writers, batch-file survivors, and people who type faster than they decorate.
+
+ASCII is canonical. Unicode is optional pretty-printing.
 
 > **No transformation may silently acquire a larger world than the one under which it was justified.**
 
-## 2. Canonical Form
+## 2. Canonical keyboard form
+
 ```f11
-func parsMod (src: &source, arena: !arena)
-    -> result<modID, parsErr>
-=
-F11 pars ⟪ src, arena ⟫ -> result<modID, parsErr> ⟨
-    K stream ≡ tok(src);
-    J ast ≡ parsItems(stream, arena);
-    N bound ≡ ast.end ≤ src.len;
-    N whole ≡ ast.mod ≠ ∅;
-    bound ∧ whole ∨ esc .pars;
-    ok(ast.mod)
-⟩
-esc e ⟨ err(e) ⟩
+func parsMod(src:&source, arena:!arena) -> result<modID,parsErr> {
+    F11 pars [src arena] -> result<modID,parsErr> {
+        K stream = tok(src);
+        J ast = parsItems(stream, arena);
+
+        N bound = ast.end <= src.len;
+        N whole = ast.mod != none;
+
+        bound && whole || esc .pars;
+
+        ok(ast.mod);
+    }
+    esc e {
+        err(e);
+    };
+}
 ```
 
-`=` defines. `≡` binds. `←` mutates. `⟪…⟫` encloses admitted context. `⟨…⟩` encloses execution. Blocks yield their final expression.
+The grammar should feel familiar before its semantics become unusual.
 
-## 3. Core Notation
-| Form | Meaning |
-|---|---|
-| `func f (…) -> T = e` | function definition |
-| `x ≡ e` | immutable binding |
-| `x ← e` | mutation |
-| `F11 w ⟪…⟫ -> T ⟨…⟩` | bounded operative world |
-| `K x ≡ e` | relevance binding |
-| `J x ≡ e` | transformational binding |
-| `N x ≡ e` | invariant evidence; `e : bool` |
-| `a ∧ b`, `a ∨ b` | short-circuit boolean ops |
-| `esc e` | escape current world |
-| `.name` | tag literal |
-| `&T` | shared borrow |
-| `!T` | unique writable borrow |
-| `*T` | raw pointer; unsafe |
-| `∅` | empty / none where admitted by type |
+## 3. Keyboard law
 
-Canonical source is UTF-8. F11/0 must also accept ASCII aliases: `<< >>` for `⟪ ⟫`, `<{ }>` for `⟨ ⟩`, `:=` for `≡`, `<-` for `←`, `&&` for `∧`, `||` for `∨`, `<=` for `≤`, `!=` for `≠`.
+Canonical source uses:
 
-## 4. Worlds
-`F11` creates a lexically closed operative world. Code inside it may use only admitted names, names created inside it, compile-time types/constants, and authority reachable through admitted capabilities.
-
-```f11
-secret ≡ loadSecret(io);
-F11 audit ⟪ log ⟫ -> bool ⟨
-    secret ≠ ∅     // error: not admitted
-⟩
+```text
+{}      executable blocks
+[]      admitted world
+()      calls / grouping / payloads
+=       immutable binding
+<-      mutation
+&&      short-circuit AND
+||      short-circuit OR
+!       logical NOT / unique type prefix by position
+&       shared borrow type prefix
+*       raw representation pointer by position
+.name   tag
+;       statement terminator
+#       line comment
+//      line comment
 ```
 
-Admission follows type. `T` is owned and moves unless `T : copy`; `&T` is shared; `!T` is unique writable. Capability values carry external authority. Worlds do not restate those modes.
+Pretty/document notation may render:
 
-```f11
-F11 outer ⟪ net, state ⟫ -> T ⟨
-    F11 inner ⟪ state ⟫ -> U ⟨
-        net.send(x)    // error: inner did not admit net
-    ⟩
-⟩
+```text
+=   ->  ≡      binding
+<-  ->  ←      mutation
+&&  ->  ∧
+||  ->  ∨
+[]  ->  ⟪⟫     world admission
+{}  ->  ⟨⟩     execution
+<=  ->  ≤
+>=  ->  ≥
+!=  ->  ≠
 ```
 
-A world does not claim to contain every fact. It declares its admitted context sufficient for the current computation. When that declaration fails, `esc` or construct another world.
+Pretty notation never carries semantics unavailable in ASCII.
 
-## 5. K — Relevance
-`K` binds a value as relevant inside the current world.
+Keywords are case-insensitive:
 
 ```f11
-K stream ≡ tok(src);
-K dead ≡ insn | redundant(_, dom);
+func FUNC Func
+f11 F11
+esc ESC
+k K
+j J
+n N
 ```
 
-A `K` binding carries world provenance and cannot outlive its world by reference. `K` is not magical attention: the expression may be a projection, predicate, mask, slice, index set, graph neighborhood, query, model output, or any typed selector.
+Identifiers remain case-sensitive.
 
-Conceptually: `K : (world W, T) → focus<T,W>`. The compiler may lower a focus to an ordinary value, slice, bitmask, index set, pointer range, SIMD mask, or another native representation.
+## 4. Short-name pressure
 
-## 6. J — Transformation
-`J` marks a state transition whose dependencies are explicit in the current world.
+Syntax already carries category, so names should not narrate it twice.
 
-```f11
-J ast ≡ parsItems(stream, arena);
-J next ≡ rewrite(block, dead);
+Prefer:
+
+```text
+pars    not parser/parsing
+recov   not recovery
+cond    not condition
+bound   not bounded
+whole   not completeness
+tok     not tokenStream
+cfg     not controlFlowGraph
+cap     not capability when context is clear
 ```
 
-`J` does not itself imply mutation. Mutation remains explicit through writable values and `←`. `J` records transformational meaning for checks, diagnostics, JK∨ IR, and audit tooling.
+This is style, not a lexer restriction.
+
+## 5. Functions and blocks
 
 ```f11
-J func rewrite (b: !block, k: &cand) -> block = ⟨ ... ⟩
+func inc(x:n22) -> n22 {
+    x + 1;
+}
 ```
 
-A `J` expression may use only values visible in its world and effects reachable through admitted capabilities.
-
-## 7. N — Invariant Evidence
-`N` binds boolean evidence about a state or transformation.
+Blocks are expressions. Their final expression is their value. A trailing semicolon on the final expression is accepted.
 
 ```f11
-N bound ≡ ast.end ≤ src.len;
-N whole ≡ ast.mod ≠ ∅;
-N safe ≡ policy.permits(next);
+func max(a:z44, b:z44) -> z44 {
+    if a > b {
+        a;
+    } else {
+        b;
+    };
+}
 ```
 
-`N name ≡ e` requires `e : bool`. If the compiler proves `e`, the runtime check may vanish. Otherwise it evaluates normally. Names should stay short because `N` already carries the category: `bound`, `whole`, `safe`, `typed`, `live`, `same`.
+F11/0 may retain the old compact `func f(...) -> T = expr;` form as a bootstrap compatibility form, but it is not canonical.
 
-Named refinement/shell types are deferred beyond F11/0.
-
-## 8. Cond, ∨, esc, recov
-A **cond** is any boolean expression governing continuation.
+## 6. Worlds
 
 ```f11
-bound ∧ whole ∨ esc .pars;
-```
-
-Because `∨` short-circuits and `esc : never`, this means continue when the cond holds, otherwise escape. `esc` is not `break`, `return`, an ordinary error, or panic; it means the current world is insufficient for justified continuation.
-
-```f11
-F11 w ⟪ ctx ⟫ -> result<T,E> ⟨
+F11 name [admitted names] -> T {
     ...
-    cond ∨ esc e;
-    ok(v)
-⟩
-esc e ⟨ err(e) ⟩
+}
+esc e {
+    recov;
+}
 ```
 
-The world body and recov arm must type to the declared result type. Nested escape may target a named world: `esc outer .reframe;`. On escape, owned values in the exited world are dropped, its region is released, then control enters recov.
+A world is lexically closed. Inside it, code may use only:
 
-## 9. Bindings and Mutation
+- names admitted in `[]`
+- names created inside the world
+- compile-time language items
+- authority reachable through admitted capability values
+
+Commas in world admission are optional:
+
 ```f11
-x ≡ 4;
-x: i64 ≡ 4;
-var i: usize ≡ 0;
-i ← i + 1;
+F11 a [src arena fs] -> T { ... }
+F11 a [src, arena, fs] -> T { ... }
 ```
 
-Mutation requires a writable local, unique borrow, or explicit mutable capability. There is no implicit global mutable state.
+A function called inside a world does not smuggle ambient authority into it. Effective authority is transitive over values and capabilities admitted to the current world.
 
-## 10. Types
-Bootstrap scalars:
+```f11
+secret = load(fs);
+
+F11 audit [log] -> bit {
+    J x = inspect(secret);   # error: secret is outside this world
+    true;
+};
+```
+
+Nested worlds do not inherit outer authority:
+
+```f11
+F11 outer [net state] -> T {
+    F11 inner [state] -> U {
+        net.send(x);         # error
+    };
+};
+```
+
+A world does not claim metaphysical completeness. It claims that its admitted context is sufficient for the current computation.
+
+## 7. K / J / N
+
+`K`, `J`, and `N` are semantic bindings, not decorative keywords.
+
+```f11
+K toks = lex(src);
+J ast = pars(toks, arena);
+N whole = ast.mod != none;
+```
+
+`K x = e` binds `e` as relevant in the current world.
+
+`J x = e` binds the result of a transformation performed under the current world.
+
+`N x = e` binds invariant evidence and requires `e : bit`.
+
+For bootstrap, K/J/N values use ordinary runtime representation. Their world provenance and role survive into JK∨ IR and may erase during lowering.
+
+## 8. Cond / esc / recov
+
+A **cond** is any `bit` expression governing continuation.
+
+```f11
+bound && whole || esc .pars;
+```
+
+Because `||` short-circuits and `esc : never`, this means:
 
 ```text
-bool
-u8 u16 u32 u64 usize
-i8 i16 i32 i64 isize
-f32 f64
-char unit never
+continue when bound && whole
+otherwise reject the current world as sufficient
 ```
 
-Core compound forms:
+`esc` is not an exception, panic, return, or break.
+
+```f11
+F11 build [src a] -> result<modID,err> {
+    ...
+    N sane = verify(ir);
+    sane || esc .ir;
+    ok(mod);
+}
+esc e {
+    err(e);
+};
+```
+
+An escape:
+
+1. evaluates its payload
+2. destroys owned world-local values in reverse construction order
+3. releases the world region
+4. transfers directly to the world's `recov` arm
+
+No hidden stack exception mechanism is required.
+
+Nested escape targets the nearest world unless named:
+
+```f11
+esc .bad;
+esc outer .reframe;
+```
+
+## 9. Binding and mutation
+
+Immutable binding:
+
+```f11
+x = 4;
+K toks = lex(src);
+```
+
+Explicit mutable local:
+
+```f11
+var i:n22 = 0;
+i <- i + 1;
+```
+
+Repeated `=` does not mean mutation.
+
+Mutation requires a writable local, unique borrow, or explicitly admitted mutable capability.
+
+## 10. Scalar law
+
+F11 does not use C's integer vocabulary as its native numeric ontology.
 
 ```text
-[T; n]       fixed array
-[]T          slice
-(T,U,…)      tuple
-struct       product
-enum         sum
-func(…) -> T function
-result<T,E>
-opt<T>
-&T  !T  *T
+bit          truth, exactly two values
+byte         exactly 8 data bits
+f11          element of GF(11), values 0..10
+
+n11 z11
+n22 z22
+n44 z44
+n88 z88
+
+idx          target-native nonnegative index magnitude
+off          target-native signed offset
 ```
 
-Generics are monomorphized in F11/0.
+`n` denotes natural/bounded unsigned integers.  
+`z` denotes signed integers.
 
-```f11
-struct pair<T,U> ⟨ a: T; b: U; ⟩
+The width ladder is semantic:
+
+```text
+n11  : 11 value bits
+n22  : 22 value bits
+n44  : 44 value bits
+n88  : 88 value bits
 ```
 
-`result<T,E>` has `ok(T)` and `err(E)`. `opt<T>` has `some(T)` and `none`.
+Physical carriers may be wider. An `n22` remains an `n22` even if a target uses a 32-bit register.
 
-## 11. Ownership and Memory
-F11 requires no tracing GC. Owned non-`copy` values move. `&T` may alias but cannot mutate `T`; `!T` is unique for its lifetime and may mutate `T`; borrows cannot outlive their referent; dereferencing `*T` requires `unsafe`.
+LLVM may therefore lower directly through `i11`, `i22`, `i44`, and `i88` before target legalization.
 
-Each `F11` world may own a region. Region allocations die on normal completion or `esc`, and references into that region cannot escape it.
+### f11
+
+`f11` is genuinely the finite field GF(11):
 
 ```f11
-node ≡ region.alloc<node>();
+a:f11 = 8;
+b:f11 = 7;
+
+c = a + b;   # 4
+d = a * b;   # 1
 ```
 
-General heap allocation is provided by an admitted allocator capability, not ambient authority.
+Its arithmetic is field arithmetic, not machine wraparound.
 
-## 12. Capabilities
-External authority is represented by typed values whose methods perform effects. Hosted core capabilities include `fileR<P>`, `fileW<P>`, `proc`, `clock`, `entropy`, `net`, and `alloc`. Importing a module grants no authority.
+### integer arithmetic
+
+Default `n*/z*` arithmetic is checked.
+
+Provisional explicit variants:
 
 ```f11
-func emit (obj: &bytes, out: fileW<path>) -> ioRes = out.write(obj);
+a + b     # checked
+a +% b    # wrapping
+a +^ b    # saturating
 ```
 
-A function with no capability, writable borrow, unsafe op, clock, or entropy input is deterministic with respect to its arguments.
+Exact operator spellings remain bootstrap-freeze material, but silent C-style overflow is forbidden.
 
-## 13. Control
-F11/0 requires:
+## 11. Representation is not value
+
+A semantic width does not dictate packed memory layout.
+
+Example:
+
+```text
+n22 value domain    22 bits
+F11 ABI carrier     profile-defined, commonly 32 bits
+pack<n22>           explicit dense representation
+```
+
+Endianness, alignment, aggregate layout, padding, and enum representation are defined by the F11 ABI profile, never inferred from a C compiler.
+
+## 12. Core data needed for self-hosting
+
+The bootstrap wick is:
+
+```text
+byte / slice / vec
+struct
+enum
+arena
+integer ID
+match
+while
+var + <-
+F11 / K / J / N / esc
+```
+
+Compiler graphs use arenas and IDs rather than recursive ownership.
 
 ```f11
-if cond ⟨ a ⟩ else ⟨ b ⟩
-unless cond ⟨ body ⟩
-while cond ⟨ body ⟩
-for x in xs ⟨ body ⟩
-match x ⟨ pat => expr; ... ⟩
+type tokID  = n22;
+type exprID = n22;
+type typeID = n22;
+
+struct span {
+    lo:n44;
+    hi:n44;
+}
+
+enum expr {
+    int(z44);
+    bit(bit);
+    name(symID);
+    call(symID, vec<exprID>);
+    binary(op, exprID, exprID);
+    world(worldID);
+    escape(exprID);
+}
+
+struct ast {
+    exprs:arena<expr>;
+    funcs:arena<func>;
+    worlds:arena<world>;
+}
+```
+
+This intentionally avoids requiring a sophisticated recursive lifetime solver before F11 can compile itself.
+
+## 13. Vec / slice / str
+
+```f11
+struct vec<T> {
+    ptr:*T;
+    len:idx;
+    cap:idx;
+}
+
+struct str {
+    bytes:[]byte;
+}
+```
+
+UTF-8 source uses byte offsets for spans. Unicode decoding belongs to lexing.
+
+`vec<T>` is part of F11/0 because the compiler needs a growable contiguous collection.
+
+## 14. Ownership and regions
+
+F11 requires no tracing GC.
+
+```text
+T     owned value
+&T    shared borrow
+!T    unique writable borrow
+*T    raw representation pointer
+```
+
+Rules:
+
+- non-copy owned values move
+- `&T` may alias but cannot mutate T
+- `!T` is unique for its live extent
+- borrows cannot outlive their referent
+- raw pointer dereference requires unsafe authority
+- each F11 world may own a region
+- references into a world region cannot survive world exit
+
+General heap allocation requires an admitted allocator capability.
+
+## 15. Capabilities
+
+External authority is a typed value.
+
+The self-host compiler initially needs only:
+
+```text
+alloc
+file
+proc
+```
+
+It does not receive network, clock, entropy, environment, or arbitrary process authority unless explicitly admitted.
+
+Imports grant names, never powers.
+
+## 16. Control required by F11/0
+
+```f11
+if cond { a; } else { b; }
+unless cond { body; }
+
+while cond {
+    ...
+}
+
+for x in xs {
+    ...
+}
+
+match x {
+    .a(v) { ... }
+    .b(x y) { ... }
+    _       { ... }
+}
+
 break;
 continue;
 return expr;
 esc expr;
 ```
 
-`unless` remains ordinary negative conditional syntax; canonical world guards use `cond ∨ esc e`. Blocks are expressions and yield their final expression unless control transfers.
+Patterns omit commas by default:
 
-## 14. Data and Match
 ```f11
-enum expr ⟨
-    lit(i64);
-    name(sym);
-    add(exprID, exprID);
-⟩
-
-func eval (e: &expr) -> i64 =
-match e ⟨
-    .lit(n)   => n;
-    .add(a,b) => eval(a) + eval(b);
-    .name(_)  => 0;
-⟩;
+.binary(op l r)
 ```
 
-`match` must be exhaustive unless `_` is present.
+Calls retain commas:
 
-## 15. Modules, Unsafe, FFI
+```f11
+emitBin(op, l, r, ast, out);
+```
+
+`match` must be exhaustive unless `_` appears.
+
+## 17. Modules
+
+Modules are namespaces and compilation units, not authority boundaries.
+
 ```f11
 mod pars;
 use lex.tok;
-use ir.{block, value};
+use ir.{block,value};
 ```
 
-Modules are namespaces/compilation units, not authority boundaries.
+For the first self-host, one large `f11c.f11` is acceptable. Modules may be implemented immediately after the fixed point if omitting them materially simplifies Stage 0.
 
-```f11
-unsafe ⟨ x ≡ ptr.*; ⟩
-extern "C" func write (fd: i32, p: *u8, n: usize) -> isize;
+## 18. F11 ABI
+
+F11 speaks F11 natively.
+
+```text
+F11 source
+    |
+F11 semantic types
+    |
+F11 ABI
+    |
+target-profile lowering
+    |
+machine code
 ```
 
-F11/0 supports the platform C ABI. Foreign calls are unsafe unless wrapped by a typed capability. `@repr(C)` fixes interop layout.
+There is no C lingua franca in the native path.
 
-## 16. Native Compilation
+The F11 ABI defines:
+
+- canonical symbol identity / mangling
+- scalar representation
+- aggregate layout
+- alignment and padding
+- argument/result classes
+- ownership transfer across calls
+- capability handle representation
+- world-bound value restrictions
+- escape boundary behavior
+- ABI versioning
+- target profile legalization
+
+Initial target profiles:
+
+```text
+linux-x86_64
+linux-aarch64
+android-aarch64
+```
+
+A profile maps F11 semantic values to legal physical carriers. Example:
+
+```text
+n11 -> low 11 semantic bits in legal target carrier
+n22 -> low 22 semantic bits in legal target carrier
+n44 -> low 44 semantic bits in legal target carrier
+n88 -> canonical multi-register / stack representation
+f11 -> canonical normalized 0..10 representation
+```
+
+The precise physical carrier is profile law, not source-language law.
+
+## 19. Foreign boundaries
+
+Foreign interfaces are canonical translations from F11 ABI directly into the foreign target contract.
+
+```text
+F11 ABI <-> SysV64
+F11 ABI <-> AAPCS64
+F11 ABI <-> JNI
+F11 ABI <-> WASM
+F11 ABI <-> platform binary interface
+```
+
+No C source wrapper is required.
+
+Foreign representation descriptors live only at the boundary and do not become ordinary F11 types.
+
+A foreign C library is treated as a binary interface obeying a platform calling convention plus C layout rules; F11 generates that translation directly.
+
+## 20. Native compilation
+
 ```text
 .f11
- ↓ lex / pars
+  |
+lex / pars
+  |
 AST
- ↓ name + type
-world + cap + borrow
- ↓
+  |
+resolve / type
+  |
+world / cap / borrow
+  |
 JK∨ IR
- ↓
+  |
 SSA
- ↓
+  |
 LLVM IR
- ↓
-object → link → native executable
+  |
+object
+  |
+link
+  |
+native executable
 ```
 
-JK∨ IR preserves at least `WORLD.IN`, `WORLD.OUT`, `WORLD.ESC`, `K.BIND`, `J.APPLY`, `N.CHECK`, `CAP.USE`, `REGION.NEW`, `REGION.DROP`. These are semantic IR ops, not runtime calls; lowering may erase them.
-
-Initial targets: `x86_64-linux`, `aarch64-linux`, `aarch64-android`. The first compiler may emit textual LLVM IR and invoke LLVM/Clang through an admitted `proc` capability. LLVM is a backend, not an F11 runtime. Freestanding F11 may compile with no language runtime beyond platform startup and explicitly linked facilities.
-
-## 17. F11/0 Bootstrap Subset
-F11/0 contains only what is needed to implement `f11c`: scalars; arrays/slices; struct/enum; result/opt; monomorphized generics; funcs/recursion; immutable binding plus explicit mutation; if/unless/while/for/match; modules; ownership plus `&`/`!`; world regions; capabilities; `F11/K/J/N/esc`; unsafe/C ABI; textual LLVM IR emission.
-
-It excludes threads, async, closures, traits, overloadable operators, macros, reflection, exceptions, GC, shell/refinement types, SMT proving, package management, and a direct machine-code backend. Exclusion means “not required to bootstrap,” not “promised later.”
-
-## 18. Bootstrap
-Stage 0 is a disposable host-language compiler whose only job is to compile the first self-hosted compiler. The current seed is Go.
+JK∨ IR preserves at least:
 
 ```text
-f11c₀ (Go)
-   ↓
-f11c₁ (F11)
-   ↓ self-compile
-f11c₂ (F11)
+WORLD.IN
+WORLD.OUT
+WORLD.ESC
+K.BIND
+J.APPLY
+N.CHECK
+CAP.USE
+REGION.NEW
+REGION.DROP
 ```
 
-Bootstrap succeeds when `f11c₁` and `f11c₂` agree on normalized semantic output for the compiler source. Byte-identical native binaries are desirable but not initially required because backend/linker metadata may vary. No Stage-0-only semantic feature may remain necessary after Stage 1.
+These are semantic IR operations, not mandatory runtime calls.
 
-The self-hosted compiler remains conventional beneath F11 semantics:
+Stage 0 may invoke Clang as an LLVM/link driver. Clang does not define F11 semantics or ABI. The intended native chain is eventually LLVM object output plus the platform linker/lld.
+
+## 21. Bootstrap
 
 ```text
-source → lex → pars → AST → resolve → type → world/cap/borrow → JK∨ IR → SSA → LLVM text
+f11c0  Go seed
+  |
+  | grow only the wick
+  v
+f11c1  compiler written in F11
+  |
+  | self-compile
+  v
+f11c2  compiler produced by F11
 ```
 
-```f11
-func optBlock (b: !block, dom: &domInfo)
-    -> result<block,optErr>
-=
-F11 opt ⟪ b, dom ⟫ -> result<block,optErr> ⟨
-    K dead ≡ b.insn | redundant(_, dom);
-    J next ≡ elim(b, dead);
-    N cfg ≡ validCfg(next);
-    N typed ≡ validType(next);
-    cfg ∧ typed ∨ esc .rewrite;
-    ok(next)
-⟩
-esc e ⟨ err(e) ⟩
-```
+The parent learns only what the child requires.
 
-## 19. Grammar Spine
-```ebnf
-prog   = { item } ;
-item   = func | struct | enum | mod | use | extern ;
-func   = [ "J" ] "func" id "(" params ")" "->" type "=" expr ;
-world  = "F11" id "⟪" admits "⟫" "->" type block [ "esc" id block ] ;
-block  = "⟨" { stmt } [ expr ] "⟩" ;
-stmt   = bind ";" | kbind ";" | jbind ";" | nbind ";" | assign ";" | control ;
-bind   = id [ ":" type ] "≡" expr ;
-kbind  = "K" id "≡" expr ;
-jbind  = "J" id "≡" expr ;
-nbind  = "N" id "≡" expr ;
-assign = place "←" expr ;
-escape = "esc" [ id ] [ expr ] ;
-```
-
-This fixes the bootstrap spine only. Full precedence, patterns, attributes, type grammar, and module paths belong in the implementation grammar.
-
-## 20. Naming Pressure
-Where syntax already supplies category, use the shortest clear root: `pars` not `parser/parsing`; `recov` not `recovery`; `cond` not `condition`; `bound` not `bounded`; `whole` not `completeness`; `tok` not `tokenStream`; `cfg` not `controlFlowGraph`; `cap` not `capability` when context is clear. This is style, not a lexer rule.
-
-## 21. Diagnostics
-Diagnostics should speak F11 semantics, not collapse violations into generic scope errors.
+Bootstrap succeeds when:
 
 ```text
-E041  J `next` depends on `policy` outside F11 `decide`.
-
-      next
-        ↑ J
-      evidence
-        ↑ K
-      decide ⟪ state, obs ⟫
-
-      `policy` is not admitted.
-      Admit it, derive it from admitted context, or esc.
+f11c0(f11c.f11) -> f11c1
+f11c1(f11c.f11) -> f11c2
+normJK(f11c1 output) == normJK(f11c2 output)
 ```
 
-World provenance remains compiler-visible even when erased from machine code.
+Native binary identity is desirable but not required initially because linker metadata may vary.
 
-## 22. Non-goals
-F11 is not a prompt language, agent framework, transformer DSL, theorem prover, VM, or universal replacement for C/Rust/OCaml/Python. It is for software where hidden context, ambient authority, unchecked transformation, or unstated adequacy assumptions are themselves part of correctness.
+After `f11c1` exists, no Go-only semantic feature may remain necessary.
 
-## 23. Semantic Summary
+## 22. Compiler-world discipline
+
+The self-host compiler itself must demonstrate F11's thesis.
+
+Each phase receives a world no larger than required:
+
 ```text
-F11 W ⟪Γ⟫
-    totalize Γ as the operative world
-K x ≡ e
+lex       [src arena]
+pars      [tok arena]
+resolve   [ast names arena]
+type      [ast types arena]
+worldchk  [typed worldinfo arena]
+lower     [checked ir arena]
+emit      [ir out]
+```
+
+No pass receives generic compiler-global authority.
+
+## 23. Diagnostic voice
+
+Diagnostics should be short, spatial, and actionable.
+
+```text
+F11:E041 pars: `outside` is outside the world
+
+  F11 pars [src arena]
+           ^^^^^^^^^^^
+
+  J ast uses `outside`
+             ^^^^^^^
+
+admit it, derive it, or esc
+```
+
+The compiler should speak F11 semantics rather than collapsing world violations into generic undefined-variable messages.
+
+## 24. F11/0 stop line
+
+Stage 0 may grow only until `f11c.f11` compiles.
+
+Required before stop:
+
+```text
+struct
+enum
+match
+var / <-
+while
+[]T
+vec<T>
+arena<T>
+indexing
+result<T,E>
+opt<T>
+byte/string ops
+alloc/file/proc capabilities
+unsafe representation operations
+F11 ABI lowering
+```
+
+Not required before self-hosting:
+
+```text
+threads
+async
+closures
+traits
+operator overloading
+macros
+reflection
+exceptions
+GC
+SMT
+shell/refinement types
+package management
+direct machine-code backend
+```
+
+## 25. Semantic summary
+
+```text
+F11 W [ctx]
+    totalize ctx as the operative world
+
+K x = e
     bind e as relevant in W
-J y ≡ f(x,…)
-    bind the result of an explicit transformation in W
-N n ≡ p(y)
+
+J y = f(x)
+    bind an explicit transformation in W
+
+N n = p(y)
     bind invariant evidence
-n ∨ esc r
-    continue if the cond holds; otherwise reject W as sufficient
+
+n || esc r
+    continue if n holds
+    otherwise reject W as sufficient
 ```
 
-A simulated world is a bounded execution world that admits its heuristic. F11 makes that admission executable.
+A simulated world is a bounded execution world that admits its heuristic.
+
+F11 makes that admission executable.
