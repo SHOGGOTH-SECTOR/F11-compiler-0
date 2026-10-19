@@ -162,6 +162,42 @@ func (p *Parser) parseWorld() (Expr, error) {
 	return w, nil
 }
 
+func (p *Parser) parseMatch() (Expr, error) {
+	st := p.take()
+	v, err := p.parseExpr(0)
+	if err != nil { return nil, err }
+	if _, err = p.want(TokLBlock, "{"); err != nil { return nil, err }
+	m := &MatchExpr{Value: v, Pos: st.Pos}
+	for !p.at(TokRBlock) {
+		var pat MatchPat
+		switch {
+		case p.at(TokDot):
+			d := p.take()
+			n, err := p.want(TokIdent, "tag pattern")
+			if err != nil { return nil, err }
+			pat = MatchPat{Kind: 't', Lit: n.Lit, Pos: d.Pos}
+		case p.at(TokInt):
+			t := p.take()
+			pat = MatchPat{Kind: 'i', Lit: t.Lit, Pos: t.Pos}
+		case p.at(TokTrue) || p.at(TokFalse):
+			t := p.take()
+			pat = MatchPat{Kind: 'b', Lit: t.Lit, Pos: t.Pos}
+		case p.at(TokIdent) && p.cur().Lit == "_":
+			t := p.take()
+			pat = MatchPat{Kind: '_', Lit: "_", Pos: t.Pos}
+		default:
+			t := p.cur()
+			return nil, fmt.Errorf("%d:%d: expected match pattern, got %q", t.Pos.Line, t.Pos.Col, t.Lit)
+		}
+		body, err := p.parseBlock()
+		if err != nil { return nil, err }
+		m.Arms = append(m.Arms, MatchArm{Pat: pat, Body: body})
+		if p.at(TokSemi) || p.at(TokComma) { p.take() }
+	}
+	p.take()
+	return m, nil
+}
+
 func (p *Parser) parseIf() (Expr, error) {
 	st := p.take()
 	cond, err := p.parseExpr(0)
@@ -321,6 +357,8 @@ func (p *Parser) parseExpr(min int) (Expr, error) {
 		left = x
 	case TokIf:
 		return p.parseIf()
+	case TokMatch:
+		return p.parseMatch()
 	case TokF11:
 		return p.parseWorld()
 	case TokEsc:
