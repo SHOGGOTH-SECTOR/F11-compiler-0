@@ -6,6 +6,7 @@ const (
 	TokEOF TokKind = iota
 	TokIdent
 	TokInt
+	TokString
 	TokFunc
 	TokF11
 	TokK
