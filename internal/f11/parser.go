@@ -181,7 +181,9 @@ func (p *Parser) parseMatch() (Expr, error) {
 			pat = MatchPat{Kind: 'i', Lit: t.Lit, Pos: t.Pos}
 		case p.at(TokTrue) || p.at(TokFalse):
 			t := p.take()
-			pat = MatchPat{Kind: 'b', Lit: t.Lit, Pos: t.Pos}
+			lit := "false"
+			if t.Kind == TokTrue { lit = "true" }
+			pat = MatchPat{Kind: 'b', Lit: lit, Pos: t.Pos}
 		case p.at(TokIdent) && p.cur().Lit == "_":
 			t := p.take()
 			pat = MatchPat{Kind: '_', Lit: "_", Pos: t.Pos}
