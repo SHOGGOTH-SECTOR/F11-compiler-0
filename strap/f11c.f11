@@ -1,0 +1,37 @@
+# First live fragment of the self-hosted compiler.
+# This file must stay compilable by the current Stage-0 seed.
+
+struct span {
+    lo:i32;
+    hi:i32;
+}
+
+struct tok {
+    kind:tag;
+    at:span;
+}
+
+func spanLen(s:span) -> i32 {
+    s.hi - s.lo;
+}
+
+func tokOk(t:tok) -> bool {
+    t.at.hi >= t.at.lo;
+}
+
+func main() -> i32 {
+    F11 strap [] -> i32 {
+        s = span(4, 11);
+        t = tok(.ident, s);
+
+        K at = t.at;
+        J width = spanLen(at);
+        N sane = tokOk(t);
+
+        sane || esc 91;
+        width;
+    }
+    esc e {
+        e;
+    };
+}
