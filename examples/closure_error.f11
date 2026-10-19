@@ -1,5 +1,6 @@
-func leak (outside: i32) -> i32 =
-F11 sealed ⟪ ⟫ -> i32 ⟨
-    J x ≡ outside + 1;
-    x
-⟩
+func leak(outside:i32) -> i32 {
+    F11 sealed [] -> i32 {
+        J x = outside + 1;
+        x;
+    };
+}
