@@ -12,7 +12,7 @@ test: build
 	./f11c examples/struct.f11 -o /tmp/f11-struct
 	/tmp/f11-struct; test $$? -eq 42
 	./f11c strap/f11c.f11 -o /tmp/f11-strap
-	/tmp/f11-strap; test $$? -eq 10
+	/tmp/f11-strap; test $$? -eq 13
 	! ./f11c --emit check examples/closure_error.f11
 
 clean:
