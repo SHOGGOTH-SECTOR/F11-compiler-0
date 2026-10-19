@@ -101,6 +101,14 @@ type EscExpr struct {
 func (*EscExpr) exprNode()      {}
 func (e *EscExpr) GetPos() Pos { return e.Pos }
 
+type BlockExpr struct {
+	Block *Block
+	Pos   Pos
+}
+
+func (*BlockExpr) exprNode()      {}
+func (e *BlockExpr) GetPos() Pos { return e.Pos }
+
 type Block struct {
 	Stmts []Stmt
 	Tail  Expr
