@@ -37,32 +37,28 @@ type IntExpr struct {
 	Value string
 	Pos   Pos
 }
-
-func (*IntExpr) exprNode()      {}
+func (*IntExpr) exprNode() {}
 func (e *IntExpr) GetPos() Pos { return e.Pos }
 
 type BoolExpr struct {
 	Value bool
 	Pos   Pos
 }
-
-func (*BoolExpr) exprNode()      {}
+func (*BoolExpr) exprNode() {}
 func (e *BoolExpr) GetPos() Pos { return e.Pos }
 
 type VarExpr struct {
 	Name string
 	Pos  Pos
 }
-
-func (*VarExpr) exprNode()      {}
+func (*VarExpr) exprNode() {}
 func (e *VarExpr) GetPos() Pos { return e.Pos }
 
 type TagExpr struct {
 	Name string
 	Pos  Pos
 }
-
-func (*TagExpr) exprNode()      {}
+func (*TagExpr) exprNode() {}
 func (e *TagExpr) GetPos() Pos { return e.Pos }
 
 type CallExpr struct {
@@ -70,8 +66,7 @@ type CallExpr struct {
 	Args []Expr
 	Pos  Pos
 }
-
-func (*CallExpr) exprNode()      {}
+func (*CallExpr) exprNode() {}
 func (e *CallExpr) GetPos() Pos { return e.Pos }
 
 type UnaryExpr struct {
@@ -79,8 +74,7 @@ type UnaryExpr struct {
 	X   Expr
 	Pos Pos
 }
-
-func (*UnaryExpr) exprNode()      {}
+func (*UnaryExpr) exprNode() {}
 func (e *UnaryExpr) GetPos() Pos { return e.Pos }
 
 type BinaryExpr struct {
@@ -88,25 +82,31 @@ type BinaryExpr struct {
 	L, R Expr
 	Pos  Pos
 }
-
-func (*BinaryExpr) exprNode()      {}
+func (*BinaryExpr) exprNode() {}
 func (e *BinaryExpr) GetPos() Pos { return e.Pos }
+
+type IfExpr struct {
+	Cond Expr
+	Then *Block
+	Else *Block
+	Pos  Pos
+}
+func (*IfExpr) exprNode() {}
+func (e *IfExpr) GetPos() Pos { return e.Pos }
 
 type EscExpr struct {
 	Target string
 	Value  Expr
 	Pos    Pos
 }
-
-func (*EscExpr) exprNode()      {}
+func (*EscExpr) exprNode() {}
 func (e *EscExpr) GetPos() Pos { return e.Pos }
 
 type BlockExpr struct {
 	Block *Block
 	Pos   Pos
 }
-
-func (*BlockExpr) exprNode()      {}
+func (*BlockExpr) exprNode() {}
 func (e *BlockExpr) GetPos() Pos { return e.Pos }
 
 type Block struct {
@@ -125,8 +125,7 @@ type WorldExpr struct {
 	EscTy    Type // filled by sema
 	Pos      Pos
 }
-
-func (*WorldExpr) exprNode()      {}
+func (*WorldExpr) exprNode() {}
 func (e *WorldExpr) GetPos() Pos { return e.Pos }
 
 type Stmt interface {
@@ -139,15 +138,38 @@ type BindStmt struct {
 	Name string
 	X    Expr
 	Pos  Pos
-} // 0 ordinary, K/J/N
-
-func (*BindStmt) stmtNode()      {}
+}
+func (*BindStmt) stmtNode() {}
 func (s *BindStmt) GetPos() Pos { return s.Pos }
+
+type VarStmt struct {
+	Name string
+	Ty   Type // empty Name means infer
+	X    Expr
+	Pos  Pos
+}
+func (*VarStmt) stmtNode() {}
+func (s *VarStmt) GetPos() Pos { return s.Pos }
+
+type AssignStmt struct {
+	Name string
+	X    Expr
+	Pos  Pos
+}
+func (*AssignStmt) stmtNode() {}
+func (s *AssignStmt) GetPos() Pos { return s.Pos }
+
+type WhileStmt struct {
+	Cond Expr
+	Body *Block
+	Pos  Pos
+}
+func (*WhileStmt) stmtNode() {}
+func (s *WhileStmt) GetPos() Pos { return s.Pos }
 
 type ExprStmt struct {
 	X   Expr
 	Pos Pos
 }
-
-func (*ExprStmt) stmtNode()      {}
+func (*ExprStmt) stmtNode() {}
 func (s *ExprStmt) GetPos() Pos { return s.Pos }
