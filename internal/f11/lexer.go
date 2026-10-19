@@ -2,6 +2,7 @@ package f11
 
 import (
 	"fmt"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 )
@@ -82,13 +83,14 @@ func (l *Lexer) next() (Token, error) {
 		return Token{Kind: TokEOF, Pos: p}, nil
 	}
 
-	// ASCII aliases first.
 	pairs := []struct {
 		s string
 		k TokKind
 	}{
-		{"->", TokArrow}, {"<<", TokLWorld}, {">>", TokRWorld}, {"<{", TokLBlock}, {"}>", TokRBlock},
-		{":=", TokDefEq}, {"<=", TokLE}, {">=", TokGE}, {"==", TokEqEq}, {"!=", TokNE}, {"&&", TokAnd}, {"||", TokOr},
+		{"->", TokArrow}, {"<-", TokAssign},
+		{"<<", TokLWorld}, {">>", TokRWorld}, {"<{", TokLBlock}, {"}>", TokRBlock},
+		{":=", TokDefEq}, {"<=", TokLE}, {">=", TokGE}, {"==", TokEqEq}, {"!=", TokNE},
+		{"&&", TokAnd}, {"||", TokOr},
 	}
 	for _, q := range pairs {
 		if l.peekNBytes(len(q.s)) == q.s {
@@ -101,6 +103,14 @@ func (l *Lexer) next() (Token, error) {
 
 	r := l.take()
 	switch r {
+	case '[':
+		return Token{Kind: TokLWorld, Lit: string(r), Pos: p}, nil
+	case ']':
+		return Token{Kind: TokRWorld, Lit: string(r), Pos: p}, nil
+	case '{':
+		return Token{Kind: TokLBlock, Lit: string(r), Pos: p}, nil
+	case '}':
+		return Token{Kind: TokRBlock, Lit: string(r), Pos: p}, nil
 	case '⟪':
 		return Token{Kind: TokLWorld, Lit: string(r), Pos: p}, nil
 	case '⟫':
@@ -111,6 +121,8 @@ func (l *Lexer) next() (Token, error) {
 		return Token{Kind: TokRBlock, Lit: string(r), Pos: p}, nil
 	case '≡':
 		return Token{Kind: TokDefEq, Lit: string(r), Pos: p}, nil
+	case '←':
+		return Token{Kind: TokAssign, Lit: string(r), Pos: p}, nil
 	case '≤':
 		return Token{Kind: TokLE, Lit: string(r), Pos: p}, nil
 	case '≥':
@@ -122,7 +134,11 @@ func (l *Lexer) next() (Token, error) {
 	case '∨':
 		return Token{Kind: TokOr, Lit: string(r), Pos: p}, nil
 	case '(', ')', ',', ':', ';', '=', '+', '-', '*', '/', '%', '<', '>', '!', '&', '.':
-		m := map[rune]TokKind{'(': TokLParen, ')': TokRParen, ',': TokComma, ':': TokColon, ';': TokSemi, '=': TokEquals, '+': TokPlus, '-': TokMinus, '*': TokStar, '/': TokSlash, '%': TokPercent, '<': TokLT, '>': TokGT, '!': TokBang, '&': TokAmp, '.': TokDot}
+		m := map[rune]TokKind{
+			'(': TokLParen, ')': TokRParen, ',': TokComma, ':': TokColon, ';': TokSemi,
+			'=': TokEquals, '+': TokPlus, '-': TokMinus, '*': TokStar, '/': TokSlash,
+			'%': TokPercent, '<': TokLT, '>': TokGT, '!': TokBang, '&': TokAmp, '.': TokDot,
+		}
 		return Token{Kind: m[r], Lit: string(r), Pos: p}, nil
 	}
 
@@ -144,8 +160,12 @@ func (l *Lexer) next() (Token, error) {
 			}
 		}
 		lit := l.src[start:l.off]
-		kw := map[string]TokKind{"func": TokFunc, "F11": TokF11, "K": TokK, "J": TokJ, "N": TokN, "esc": TokEsc, "true": TokTrue, "false": TokFalse}
-		if k, ok := kw[lit]; ok {
+		low := strings.ToLower(lit)
+		kw := map[string]TokKind{
+			"func": TokFunc, "f11": TokF11, "k": TokK, "j": TokJ, "n": TokN,
+			"esc": TokEsc, "true": TokTrue, "false": TokFalse,
+		}
+		if k, ok := kw[low]; ok {
 			return Token{Kind: k, Lit: lit, Pos: p}, nil
 		}
 		return Token{Kind: TokIdent, Lit: lit, Pos: p}, nil
