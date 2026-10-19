@@ -32,16 +32,12 @@ func Lex(src string) ([]Token, error) {
 func (l *Lexer) pos() Pos  { return Pos{Line: l.line, Col: l.col, Off: l.off} }
 func (l *Lexer) eof() bool { return l.off >= len(l.src) }
 func (l *Lexer) peek() rune {
-	if l.eof() {
-		return 0
-	}
+	if l.eof() { return 0 }
 	r, _ := utf8.DecodeRuneInString(l.src[l.off:])
 	return r
 }
 func (l *Lexer) peekNBytes(n int) string {
-	if l.off+n > len(l.src) {
-		return l.src[l.off:]
-	}
+	if l.off+n > len(l.src) { return l.src[l.off:] }
 	return l.src[l.off : l.off+n]
 }
 func (l *Lexer) take() rune {
@@ -63,13 +59,11 @@ func (l *Lexer) skip() {
 			continue
 		}
 		if l.peekNBytes(2) == "//" {
-			for !l.eof() && l.take() != '\n' {
-			}
+			for !l.eof() && l.take() != '\n' {}
 			continue
 		}
 		if r == '#' {
-			for !l.eof() && l.take() != '\n' {
-			}
+			for !l.eof() && l.take() != '\n' {}
 			continue
 		}
 		break
@@ -79,9 +73,7 @@ func (l *Lexer) skip() {
 func (l *Lexer) next() (Token, error) {
 	l.skip()
 	p := l.pos()
-	if l.eof() {
-		return Token{Kind: TokEOF, Pos: p}, nil
-	}
+	if l.eof() { return Token{Kind: TokEOF, Pos: p}, nil }
 
 	pairs := []struct {
 		s string
@@ -94,9 +86,7 @@ func (l *Lexer) next() (Token, error) {
 	}
 	for _, q := range pairs {
 		if l.peekNBytes(len(q.s)) == q.s {
-			for range q.s {
-				l.take()
-			}
+			for range q.s { l.take() }
 			return Token{Kind: q.k, Lit: q.s, Pos: p}, nil
 		}
 	}
@@ -144,9 +134,7 @@ func (l *Lexer) next() (Token, error) {
 
 	if unicode.IsDigit(r) {
 		start := p.Off
-		for !l.eof() && unicode.IsDigit(l.peek()) {
-			l.take()
-		}
+		for !l.eof() && unicode.IsDigit(l.peek()) { l.take() }
 		return Token{Kind: TokInt, Lit: l.src[start:l.off], Pos: p}, nil
 	}
 	if unicode.IsLetter(r) || r == '_' {
@@ -163,7 +151,8 @@ func (l *Lexer) next() (Token, error) {
 		low := strings.ToLower(lit)
 		kw := map[string]TokKind{
 			"func": TokFunc, "f11": TokF11, "k": TokK, "j": TokJ, "n": TokN,
-			"esc": TokEsc, "true": TokTrue, "false": TokFalse,
+			"esc": TokEsc, "var": TokVar, "while": TokWhile, "if": TokIf, "else": TokElse,
+			"true": TokTrue, "false": TokFalse,
 		}
 		if k, ok := kw[low]; ok {
 			return Token{Kind: k, Lit: lit, Pos: p}, nil
