@@ -4,7 +4,39 @@ Experimental native systems language for bounded-world computation.
 
 > A process should not automatically inherit the universe. It should receive a world.
 
-This repository contains the first executable Stage-0 seed. It parses a deliberately narrow F11 subset, enforces lexical world admission, type-checks `K/J/N` bindings and `esc`, emits textual LLVM IR, and invokes Clang for native code.
+This repository contains the Stage-0 bootstrap compiler. The seed is intentionally small: it exists to lock F11's world semantics and grow only until it can compile the first compiler written in F11.
+
+## Keyboard dialect
+
+Canonical F11 source is ASCII-first and terminal-friendly:
+
+```f11
+func main() -> i32 {
+    F11 run [] -> i32 {
+        K base = 7;
+        J out = base + 1;
+        N sane = out == 8;
+        sane || esc 42;
+        out;
+    }
+    esc e {
+        e;
+    };
+}
+```
+
+The mathematical notation remains available as a pretty/document dialect:
+
+```text
+&&  <=>  ∧
+||  <=>  ∨
+<-  <=>  ←
+=   <=>  ≡  for bindings
+[]  <=>  ⟪⟫ for world admission
+{}  <=>  ⟨⟩ for blocks
+```
+
+Keywords are case-insensitive. Identifiers are case-sensitive. Both `//` and `#` start line comments.
 
 ## Build
 
@@ -41,20 +73,21 @@ LLVM inspection:
 ./f11c --emit llvm -o hello.ll examples/hello.f11
 ```
 
-## Implemented now
+## Implemented in the seed
 
-- `func`
-- scalar `i32`, `i64`, `bool`, `tag`
+- `func` and expression blocks
+- scalar bootstrap `i32`, `i64`, `bool`, `tag`
 - function calls
 - arithmetic/comparison/boolean expressions
-- Unicode syntax and bootstrap ASCII aliases
-- `F11 name ⟪ admits ⟫ -> T ⟨ ... ⟩`
+- `F11 name [admitted names] -> T { ... }`
 - `K`, `J`, `N`
-- `cond ∨ esc reason`
-- recovery arm `esc e ⟨ ... ⟩`
+- `cond || esc payload`
+- `esc e { recov }`
 - lexical world closure
 - native LLVM/Clang AOT output
 
-## Deliberately not implemented yet
+The bootstrap scalars above are implementation scaffolding, not the final F11 numeric law. The language specification defines the intended `f11 / n11 / z11 / n22 / z22 / ...` families and the F11 ABI.
 
-The compiler is not self-hosting yet. Structs/enums, result/opt, ownership/borrows, mutation, match, modules, capabilities, regions, and the self-hosted compiler source are the next bootstrap layers. The current seed exists to lock the unusual execution semantics before expanding the ordinary systems-language surface.
+## Next bootstrap layer
+
+Structs, enums, match, mutation, vectors, arenas, result/opt, byte/string operations, capabilities, and F11 ABI lowering. Stage 0 stops growing when it can compile `f11c.f11`.
