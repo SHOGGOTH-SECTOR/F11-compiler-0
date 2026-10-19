@@ -49,6 +49,8 @@ type cgWorld struct {
 type Codegen struct {
 	funcs   map[string]*FuncDecl
 	structs map[string]*StructDecl
+	globals []string
+	strID   int
 }
 
 func EmitLLVM(p *Program) (string, error) {
@@ -60,6 +62,7 @@ func EmitLLVM(p *Program) (string, error) {
 	for _, f := range p.Funcs { g.funcs[f.Name] = f }
 	var sb strings.Builder
 	sb.WriteString("; F11 bootstrap LLVM IR\nsource_filename = \"f11\"\n\n")
+	sb.WriteString("%f11.str = type { ptr, i64 }\n")
 	for _, d := range p.Structs {
 		var fs []string
 		for _, f := range d.Fields { fs = append(fs, llvmTy(f.Ty)) }
@@ -72,6 +75,9 @@ func EmitLLVM(p *Program) (string, error) {
 		sb.WriteString(x)
 		sb.WriteString("\n")
 	}
+	if len(g.globals) != 0 {
+		for _, x := range g.globals { sb.WriteString(x + "\n") }
+	}
 	return sb.String(), nil
 }
 
@@ -81,6 +87,10 @@ func llvmTy(t Type) string {
 		return "i32"
 	case "i64":
 		return "i64"
+	case "byte":
+		return "i8"
+	case "str":
+		return "%f11.str"
 	case "bool":
 		return "i1"
 	case "never":
@@ -93,6 +103,18 @@ func tagConst(name string) string {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(name))
 	return fmt.Sprintf("%d", h.Sum32()&0x7fffffff)
+}
+
+func llvmBytes(x string) string {
+	var b strings.Builder
+	for _, c := range []byte(x) {
+		if c >= 0x20 && c <= 0x7e && c != '\\' && c != '"' {
+			b.WriteByte(c)
+		} else {
+			b.WriteString(fmt.Sprintf("\\%02X", c))
+		}
+	}
+	return b.String()
 }
 
 func (g *Codegen) emitFunc(f *FuncDecl) (string, error) {
@@ -202,6 +224,19 @@ func (c *cgFunc) expr(x Expr, e *cgEnv) (cgVal, error) {
 		return c.block(q.Block, e.clone())
 	case *IntExpr:
 		return cgVal{ty: Type{Name: "i32"}, op: q.Value}, nil
+	case *StringExpr:
+		c.g.strID++
+		name := fmt.Sprintf("@.f11.str.%d", c.g.strID)
+		n := len([]byte(q.Value))
+		c.g.globals = append(c.g.globals,
+			fmt.Sprintf("%s = private unnamed_addr constant [%d x i8] c\"%s\"", name, n, llvmBytes(q.Value)))
+		p := c.newTmp()
+		c.emit(fmt.Sprintf("%s = getelementptr inbounds [%d x i8], ptr %s, i64 0, i64 0", p, n, name))
+		a := c.newTmp()
+		c.emit(fmt.Sprintf("%s = insertvalue %%f11.str undef, ptr %s, 0", a, p))
+		b := c.newTmp()
+		c.emit(fmt.Sprintf("%s = insertvalue %%f11.str %s, i64 %d, 1", b, a, n))
+		return cgVal{ty: Type{Name: "str"}, op: b}, nil
 	case *BoolExpr:
 		if q.Value { return cgVal{ty: Type{Name: "bool"}, op: "1"}, nil }
 		return cgVal{ty: Type{Name: "bool"}, op: "0"}, nil
@@ -220,11 +255,32 @@ func (c *cgFunc) expr(x Expr, e *cgEnv) (cgVal, error) {
 		t := c.newTmp()
 		c.emit(fmt.Sprintf("%s = extractvalue %s %s, %d", t, llvmTy(base.ty), base.op, idx))
 		return cgVal{ty: ty, op: t}, nil
+	case *IndexExpr:
+		base, err := c.expr(q.Base, e)
+		if err != nil { return cgVal{}, err }
+		idx, err := c.expr(q.Index, e)
+		if err != nil { return cgVal{}, err }
+		p := c.newTmp()
+		c.emit(fmt.Sprintf("%s = extractvalue %%f11.str %s, 0", p, base.op))
+		at := c.newTmp()
+		c.emit(fmt.Sprintf("%s = getelementptr inbounds i8, ptr %s, i32 %s", at, p, idx.op))
+		v := c.newTmp()
+		c.emit(fmt.Sprintf("%s = load i8, ptr %s", v, at))
+		return cgVal{ty: Type{Name: "byte"}, op: v}, nil
 	case *VarExpr:
 		b, ok := e.vals[q.Name]
 		if !ok { return cgVal{}, fmt.Errorf("codegen: unknown %s", q.Name) }
 		return c.read(b), nil
 	case *CallExpr:
+		if q.Name == "len" {
+			v, err := c.expr(q.Args[0], e)
+			if err != nil { return cgVal{}, err }
+			n64 := c.newTmp()
+			c.emit(fmt.Sprintf("%s = extractvalue %%f11.str %s, 1", n64, v.op))
+			n32 := c.newTmp()
+			c.emit(fmt.Sprintf("%s = trunc i64 %s to i32", n32, n64))
+			return cgVal{ty: Type{Name: "i32"}, op: n32}, nil
+		}
 		if f, ok := c.g.funcs[q.Name]; ok {
 			var as []string
 			for _, a := range q.Args {
