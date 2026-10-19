@@ -35,6 +35,15 @@ func (p *Parser) want(k TokKind, what string) (Token, error) {
 	}
 	return p.take(), nil
 }
+func (p *Parser) bindOp() bool { return p.at(TokEquals) || p.at(TokDefEq) }
+func (p *Parser) wantBind() error {
+	if !p.bindOp() {
+		t := p.cur()
+		return fmt.Errorf("%d:%d: expected =, got %q", t.Pos.Line, t.Pos.Col, t.Lit)
+	}
+	p.take()
+	return nil
+}
 
 func (p *Parser) parseFunc() (*FuncDecl, error) {
 	st, err := p.want(TokFunc, "func")
@@ -80,15 +89,26 @@ func (p *Parser) parseFunc() (*FuncDecl, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err = p.want(TokEquals, "="); err != nil {
-		return nil, err
-	}
-	body, err := p.parseExpr(0)
-	if err != nil {
-		return nil, err
-	}
-	if p.at(TokSemi) {
-		p.take()
+
+	var body Expr
+	if p.at(TokLBlock) {
+		b, err := p.parseBlock()
+		if err != nil {
+			return nil, err
+		}
+		body = &BlockExpr{Block: b, Pos: b.Pos}
+	} else {
+		// Legacy compact form: func f(...) -> T = expr;
+		if _, err = p.want(TokEquals, "{ or ="); err != nil {
+			return nil, err
+		}
+		body, err = p.parseExpr(0)
+		if err != nil {
+			return nil, err
+		}
+		if p.at(TokSemi) {
+			p.take()
+		}
 	}
 	return &FuncDecl{Name: n.Lit, Params: ps, Ret: ret, Body: body, Pos: st.Pos}, nil
 }
@@ -118,25 +138,21 @@ func (p *Parser) parseWorld() (Expr, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err = p.want(TokLWorld, "⟪"); err != nil {
+	if _, err = p.want(TokLWorld, "["); err != nil {
 		return nil, err
 	}
 	var admits []string
-	if !p.at(TokRWorld) {
-		for {
-			a, err := p.want(TokIdent, "admitted name")
-			if err != nil {
-				return nil, err
-			}
-			admits = append(admits, a.Lit)
-			if p.at(TokComma) {
-				p.take()
-				continue
-			}
-			break
+	for !p.at(TokRWorld) {
+		a, err := p.want(TokIdent, "admitted name")
+		if err != nil {
+			return nil, err
+		}
+		admits = append(admits, a.Lit)
+		if p.at(TokComma) {
+			p.take()
 		}
 	}
-	if _, err = p.want(TokRWorld, "⟫"); err != nil {
+	if _, err = p.want(TokRWorld, "]"); err != nil {
 		return nil, err
 	}
 	if _, err = p.want(TokArrow, "->"); err != nil {
@@ -168,7 +184,7 @@ func (p *Parser) parseWorld() (Expr, error) {
 }
 
 func (p *Parser) parseBlock() (*Block, error) {
-	st, err := p.want(TokLBlock, "⟨")
+	st, err := p.want(TokLBlock, "{")
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +200,7 @@ func (p *Parser) parseBlock() (*Block, error) {
 			if err != nil {
 				return nil, err
 			}
-			if _, err = p.want(TokDefEq, "≡"); err != nil {
+			if err = p.wantBind(); err != nil {
 				return nil, err
 			}
 			x, err := p.parseExpr(0)
@@ -197,7 +213,7 @@ func (p *Parser) parseBlock() (*Block, error) {
 			b.Stmts = append(b.Stmts, &BindStmt{Role: r.Lit[0], Name: n.Lit, X: x, Pos: r.Pos})
 			continue
 		}
-		if p.at(TokIdent) && p.i+1 < len(p.ts) && p.ts[p.i+1].Kind == TokDefEq {
+		if p.at(TokIdent) && p.i+1 < len(p.ts) && (p.ts[p.i+1].Kind == TokEquals || p.ts[p.i+1].Kind == TokDefEq) {
 			n := p.take()
 			p.take()
 			x, err := p.parseExpr(0)
@@ -216,13 +232,17 @@ func (p *Parser) parseBlock() (*Block, error) {
 		}
 		if p.at(TokSemi) {
 			p.take()
+			if p.at(TokRBlock) {
+				b.Tail = x
+				break
+			}
 			b.Stmts = append(b.Stmts, &ExprStmt{X: x, Pos: x.GetPos()})
 			continue
 		}
 		b.Tail = x
 		break
 	}
-	if _, err = p.want(TokRBlock, "⟩"); err != nil {
+	if _, err = p.want(TokRBlock, "}"); err != nil {
 		return nil, err
 	}
 	return b, nil
@@ -310,7 +330,10 @@ func (p *Parser) parseExpr(min int) (Expr, error) {
 	case TokEsc:
 		p.take()
 		var target string
-		if p.at(TokIdent) && p.i+1 < len(p.ts) && (p.ts[p.i+1].Kind == TokInt || p.ts[p.i+1].Kind == TokDot || p.ts[p.i+1].Kind == TokIdent || p.ts[p.i+1].Kind == TokTrue || p.ts[p.i+1].Kind == TokFalse) {
+		if p.at(TokIdent) && p.i+1 < len(p.ts) &&
+			(p.ts[p.i+1].Kind == TokInt || p.ts[p.i+1].Kind == TokDot ||
+				p.ts[p.i+1].Kind == TokIdent || p.ts[p.i+1].Kind == TokTrue ||
+				p.ts[p.i+1].Kind == TokFalse) {
 			target = p.take().Lit
 		}
 		x, err := p.parseExpr(7)
