@@ -22,6 +22,7 @@ const (
 	TokArrow
 	TokEquals
 	TokDefEq
+	TokAssign
 	TokLWorld
 	TokRWorld
 	TokLBlock
