@@ -12,6 +12,10 @@ const (
 	TokJ
 	TokN
 	TokEsc
+	TokVar
+	TokWhile
+	TokIf
+	TokElse
 	TokTrue
 	TokFalse
 	TokLParen
