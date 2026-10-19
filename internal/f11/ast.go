@@ -55,6 +55,13 @@ type IntExpr struct {
 func (*IntExpr) exprNode() {}
 func (e *IntExpr) GetPos() Pos { return e.Pos }
 
+type StringExpr struct {
+	Value string
+	Pos   Pos
+}
+func (*StringExpr) exprNode() {}
+func (e *StringExpr) GetPos() Pos { return e.Pos }
+
 type BoolExpr struct {
 	Value bool
 	Pos   Pos
@@ -83,6 +90,14 @@ type FieldExpr struct {
 }
 func (*FieldExpr) exprNode() {}
 func (e *FieldExpr) GetPos() Pos { return e.Pos }
+
+type IndexExpr struct {
+	Base  Expr
+	Index Expr
+	Pos   Pos
+}
+func (*IndexExpr) exprNode() {}
+func (e *IndexExpr) GetPos() Pos { return e.Pos }
 
 type CallExpr struct {
 	Name string
