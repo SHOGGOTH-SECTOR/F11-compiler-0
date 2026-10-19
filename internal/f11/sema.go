@@ -98,7 +98,9 @@ func (s *Sema) block(b *Block, e *env, esc *escCtx) (Type, error) {
 
 func (s *Sema) expr(x Expr, e *env, esc *escCtx) (Type, error) {
 	switch q := x.(type) {
-	case *BlockExpr:\n\t\treturn s.block(q.Block, e.clone(), esc)\n\tcase *IntExpr:
+	case *BlockExpr:
+		return s.block(q.Block, e.clone(), esc)
+	case *IntExpr:
 		if _, err := strconv.ParseInt(q.Value, 10, 32); err != nil {
 			return Type{}, terr(q.Pos, "integer literal out of i32 range")
 		}
