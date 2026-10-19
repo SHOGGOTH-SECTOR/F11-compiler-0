@@ -16,6 +16,7 @@ const (
 	TokWhile
 	TokIf
 	TokElse
+	TokStruct
 	TokTrue
 	TokFalse
 	TokLParen
