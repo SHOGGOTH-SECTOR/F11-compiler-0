@@ -11,9 +11,19 @@ func Parse(ts []Token) (*Program, error) {
 	p := &Parser{ts: ts}
 	prog := &Program{}
 	for !p.at(TokEOF) {
-		f, err := p.parseFunc()
-		if err != nil { return nil, err }
-		prog.Funcs = append(prog.Funcs, f)
+		switch {
+		case p.at(TokStruct):
+			d, err := p.parseStruct()
+			if err != nil { return nil, err }
+			prog.Structs = append(prog.Structs, d)
+		case p.at(TokFunc):
+			f, err := p.parseFunc()
+			if err != nil { return nil, err }
+			prog.Funcs = append(prog.Funcs, f)
+		default:
+			t := p.cur()
+			return nil, fmt.Errorf("%d:%d: expected struct or func, got %q", t.Pos.Line, t.Pos.Col, t.Lit)
+		}
 	}
 	return prog, nil
 }
@@ -39,6 +49,34 @@ func (p *Parser) wantBind() error {
 	}
 	p.take()
 	return nil
+}
+
+func (p *Parser) parseStruct() (*StructDecl, error) {
+	st, err := p.want(TokStruct, "struct")
+	if err != nil { return nil, err }
+	n, err := p.want(TokIdent, "struct name")
+	if err != nil { return nil, err }
+	if _, err = p.want(TokLBlock, "{"); err != nil { return nil, err }
+	d := &StructDecl{Name: n.Lit, Pos: st.Pos}
+	for !p.at(TokRBlock) {
+		fn, err := p.want(TokIdent, "field name")
+		if err != nil { return nil, err }
+		if _, err = p.want(TokColon, ":"); err != nil { return nil, err }
+		ty, err := p.parseType()
+		if err != nil { return nil, err }
+		d.Fields = append(d.Fields, FieldDecl{Name: fn.Lit, Ty: ty, Pos: fn.Pos})
+		if p.at(TokSemi) || p.at(TokComma) {
+			p.take()
+			continue
+		}
+		if !p.at(TokRBlock) {
+			t := p.cur()
+			return nil, fmt.Errorf("%d:%d: expected ; or }, got %q", t.Pos.Line, t.Pos.Col, t.Lit)
+		}
+	}
+	p.take()
+	if p.at(TokSemi) { p.take() }
+	return d, nil
 }
 
 func (p *Parser) parseFunc() (*FuncDecl, error) {
@@ -299,6 +337,12 @@ func (p *Parser) parseExpr(min int) (Expr, error) {
 		left = &EscExpr{Target: target, Value: x, Pos: t.Pos}
 	default:
 		return nil, fmt.Errorf("%d:%d: expected expression, got %q", t.Pos.Line, t.Pos.Col, t.Lit)
+	}
+	for p.at(TokDot) {
+		d := p.take()
+		n, err := p.want(TokIdent, "field name")
+		if err != nil { return nil, err }
+		left = &FieldExpr{Base: left, Name: n.Lit, Pos: d.Pos}
 	}
 	for {
 		op := p.cur()
