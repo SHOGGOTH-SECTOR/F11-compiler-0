@@ -319,6 +319,9 @@ func (p *Parser) parseExpr(min int) (Expr, error) {
 	case TokInt:
 		p.take()
 		left = &IntExpr{Value: t.Lit, Pos: t.Pos}
+	case TokString:
+		p.take()
+		left = &StringExpr{Value: t.Lit, Pos: t.Pos}
 	case TokTrue, TokFalse:
 		p.take()
 		left = &BoolExpr{Value: t.Kind == TokTrue, Pos: t.Pos}
@@ -378,11 +381,23 @@ func (p *Parser) parseExpr(min int) (Expr, error) {
 	default:
 		return nil, fmt.Errorf("%d:%d: expected expression, got %q", t.Pos.Line, t.Pos.Col, t.Lit)
 	}
-	for p.at(TokDot) {
-		d := p.take()
-		n, err := p.want(TokIdent, "field name")
-		if err != nil { return nil, err }
-		left = &FieldExpr{Base: left, Name: n.Lit, Pos: d.Pos}
+	for {
+		if p.at(TokDot) {
+			d := p.take()
+			n, err := p.want(TokIdent, "field name")
+			if err != nil { return nil, err }
+			left = &FieldExpr{Base: left, Name: n.Lit, Pos: d.Pos}
+			continue
+		}
+		if p.at(TokLWorld) {
+			st := p.take()
+			idx, err := p.parseExpr(0)
+			if err != nil { return nil, err }
+			if _, err = p.want(TokRWorld, "]"); err != nil { return nil, err }
+			left = &IndexExpr{Base: left, Index: idx, Pos: st.Pos}
+			continue
+		}
+		break
 	}
 	for {
 		op := p.cur()
