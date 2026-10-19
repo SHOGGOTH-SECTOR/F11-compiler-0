@@ -210,7 +210,14 @@ func (p *Parser) parseBlock() (*Block, error) {
 			if _, err = p.want(TokSemi, ";"); err != nil {
 				return nil, err
 			}
-			b.Stmts = append(b.Stmts, &BindStmt{Role: r.Lit[0], Name: n.Lit, X: x, Pos: r.Pos})
+			role := byte('K')
+			switch r.Kind {
+			case TokJ:
+				role = 'J'
+			case TokN:
+				role = 'N'
+			}
+			b.Stmts = append(b.Stmts, &BindStmt{Role: role, Name: n.Lit, X: x, Pos: r.Pos})
 			continue
 		}
 		if p.at(TokIdent) && p.i+1 < len(p.ts) && (p.ts[p.i+1].Kind == TokEquals || p.ts[p.i+1].Kind == TokDefEq) {
