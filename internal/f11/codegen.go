@@ -150,7 +150,7 @@ func (c *cgFunc) block(b *Block, e *cgEnv) (cgVal, error) {
 
 func (c *cgFunc) expr(x Expr, e *cgEnv) (cgVal, error) {
 	switch q := x.(type) {
-	case *IntExpr:
+	case *BlockExpr:\n\t\treturn c.block(q.Block, e.clone())\n\tcase *IntExpr:
 		return cgVal{Type{Name: "i32"}, q.Value}, nil
 	case *BoolExpr:
 		if q.Value {
