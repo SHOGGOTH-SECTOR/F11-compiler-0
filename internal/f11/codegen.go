@@ -46,13 +46,26 @@ type cgWorld struct {
 	escSlot  string
 	escTy    Type
 }
-type Codegen struct{ funcs map[string]*FuncDecl }
+type Codegen struct {
+	funcs   map[string]*FuncDecl
+	structs map[string]*StructDecl
+}
 
 func EmitLLVM(p *Program) (string, error) {
-	g := &Codegen{funcs: map[string]*FuncDecl{}}
+	g := &Codegen{
+		funcs:   map[string]*FuncDecl{},
+		structs: map[string]*StructDecl{},
+	}
+	for _, d := range p.Structs { g.structs[d.Name] = d }
 	for _, f := range p.Funcs { g.funcs[f.Name] = f }
 	var sb strings.Builder
 	sb.WriteString("; F11 bootstrap LLVM IR\nsource_filename = \"f11\"\n\n")
+	for _, d := range p.Structs {
+		var fs []string
+		for _, f := range d.Fields { fs = append(fs, llvmTy(f.Ty)) }
+		sb.WriteString(fmt.Sprintf("%%%s = type { %s }\n", d.Name, strings.Join(fs, ", ")))
+	}
+	if len(p.Structs) != 0 { sb.WriteString("\n") }
 	for _, f := range p.Funcs {
 		x, err := g.emitFunc(f)
 		if err != nil { return "", err }
@@ -73,7 +86,7 @@ func llvmTy(t Type) string {
 	case "never":
 		return "void"
 	}
-	return "i32"
+	return "%" + t.Name
 }
 
 func (g *Codegen) emitFunc(f *FuncDecl) (string, error) {
@@ -190,21 +203,48 @@ func (c *cgFunc) expr(x Expr, e *cgEnv) (cgVal, error) {
 		h := fnv.New32a()
 		_, _ = h.Write([]byte(q.Name))
 		return cgVal{ty: Type{Name: "tag"}, op: fmt.Sprintf("%d", h.Sum32()&0x7fffffff)}, nil
+	case *FieldExpr:
+		base, err := c.expr(q.Base, e)
+		if err != nil { return cgVal{}, err }
+		d := c.g.structs[base.ty.Name]
+		idx := -1
+		var ty Type
+		for i, f := range d.Fields {
+			if f.Name == q.Name { idx = i; ty = f.Ty; break }
+		}
+		if idx < 0 { return cgVal{}, fmt.Errorf("codegen: no field %s.%s", d.Name, q.Name) }
+		t := c.newTmp()
+		c.emit(fmt.Sprintf("%s = extractvalue %s %s, %d", t, llvmTy(base.ty), base.op, idx))
+		return cgVal{ty: ty, op: t}, nil
 	case *VarExpr:
 		b, ok := e.vals[q.Name]
 		if !ok { return cgVal{}, fmt.Errorf("codegen: unknown %s", q.Name) }
 		return c.read(b), nil
 	case *CallExpr:
-		f := c.g.funcs[q.Name]
-		var as []string
-		for _, a := range q.Args {
-			v, err := c.expr(a, e)
-			if err != nil { return cgVal{}, err }
-			as = append(as, fmt.Sprintf("%s %s", llvmTy(v.ty), v.op))
+		if f, ok := c.g.funcs[q.Name]; ok {
+			var as []string
+			for _, a := range q.Args {
+				v, err := c.expr(a, e)
+				if err != nil { return cgVal{}, err }
+				as = append(as, fmt.Sprintf("%s %s", llvmTy(v.ty), v.op))
+			}
+			t := c.newTmp()
+			c.emit(fmt.Sprintf("%s = call %s @%s(%s)", t, llvmTy(f.Ret), q.Name, strings.Join(as, ", ")))
+			return cgVal{ty: f.Ret, op: t}, nil
 		}
-		t := c.newTmp()
-		c.emit(fmt.Sprintf("%s = call %s @%s(%s)", t, llvmTy(f.Ret), q.Name, strings.Join(as, ", ")))
-		return cgVal{ty: f.Ret, op: t}, nil
+		if d, ok := c.g.structs[q.Name]; ok {
+			cur := "undef"
+			sty := Type{Name: d.Name}
+			for i, a := range q.Args {
+				v, err := c.expr(a, e)
+				if err != nil { return cgVal{}, err }
+				t := c.newTmp()
+				c.emit(fmt.Sprintf("%s = insertvalue %s %s, %s %s, %d", t, llvmTy(sty), cur, llvmTy(v.ty), v.op, i))
+				cur = t
+			}
+			return cgVal{ty: sty, op: cur}, nil
+		}
+		return cgVal{}, fmt.Errorf("codegen: unknown callable %s", q.Name)
 	case *UnaryExpr:
 		v, err := c.expr(q.X, e)
 		if err != nil { return cgVal{}, err }
