@@ -19,6 +19,14 @@ func tokOk(t:tok) -> bool {
     t.at.hi >= t.at.lo;
 }
 
+func firstByte(src:str) -> byte {
+    src[0];
+}
+
+func srcLen(src:str) -> i32 {
+    len(src);
+}
+
 func tokScore(t:tok) -> i32 {
     match t.kind {
         .ident {
@@ -43,7 +51,7 @@ func main() -> i32 {
         N sane = tokOk(t);
 
         sane || esc 91;
-        width + tokScore(t);
+        width + tokScore(t) + srcLen("F11");
     }
     esc e {
         e;
