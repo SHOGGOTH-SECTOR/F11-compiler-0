@@ -1,0 +1,13 @@
+struct pair {
+    a:i32;
+    b:i32;
+}
+
+func sum(p:pair) -> i32 {
+    p.a + p.b;
+}
+
+func main() -> i32 {
+    p = pair(19, 23);
+    sum(p);
+}
